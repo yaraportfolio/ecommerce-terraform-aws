@@ -368,22 +368,84 @@ Une fois le statut `Available`, cliquer sur `ecommerce-mysql` → Section **Conn
 
 ### 4.3 Importer le schéma
 
-Pour importer `ecommerce_db.sql`, vous avez besoin d'un accès réseau à la base. Deux options depuis la console :
+Pour importer `ecommerce_db.sql`, vous avez besoin d'un accès réseau à la base. Deux approches :
 
-**Option A - EC2 Bastion temporaire :**
-1. Lancer une EC2 `t3.micro` dans un subnet public avec le SG `ecommerce-sg-eks` attaché
-2. Se connecter via **EC2 Instance Connect** (console AWS → EC2 → Connect)
-3. Dans le terminal web :
+---
+
+**Option A - EC2 Bastion temporaire (avec SSL - Recommandé pour portfolio)**
+
+1. **Lancer une EC2 `t3.micro` dans un subnet public**
+   - Navigation : EC2 → Launch instances
+   - AMI : Amazon Linux 2
+   - Security Group : `ecommerce-sg-eks`
+   - Attendre le statut "Running"
+
+2. **Télécharger le bundle SSL RDS**
+   
+   Depuis votre **machine locale** (pas l'EC2) :
+   ```bash
+   # Créer un dossier pour le certificat
+   mkdir -p ~/rds-certs
+   cd ~/rds-certs
+   
+   # Télécharger le bundle de certificats RDS (valide globalement)
+   curl https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o global-bundle.pem
+   ```
+
+3. **Se connecter à l'EC2 et préparer l'import**
+   
+   Navigation : EC2 → Instances → Sélectionner instance → Connect → EC2 Instance Connect (onglet)
+   
+   Dans le terminal web de l'EC2 :
+   ```bash
+   # Installer le client MySQL
+   sudo dnf install -y mariadb105
+   
+   # Créer le dossier pour le certificat
+   mkdir -p ~/rds-certs
+   ```
+
+4. **Importer le schéma avec SSL (version sécurisée)**
+   
+   Dans le terminal de l'EC2 :
+   ```bash
+   cd
+   mysql -h ecommerce-mysql.c9akciq32.eu-west-1.rds.amazonaws.com \
+         -P 3306 \
+         -u devops_user \
+         -p \
+         --ssl-verify-server-cert \
+         --ssl-ca=~/rds-certs/global-bundle.pem \
+         ecommerce_db < ecommerce_db.sql
+   ```
+   
+   (Remplace l'endpoint `ecommerce-mysql.c9akciq32.eu-west-1.rds.amazonaws.com` par celui que tu as copié)
+
+5. **Arrêter l'EC2 bastion après l'import**
+   
+   Navigation : EC2 → Instances → Stop (ne pas Delete pour garder une trace)
+
+---
+
+**Option B - Version simple (sans SSL - rapide)**
+
+Si tu veux juste importer sans complexité SSL :
+
 ```bash
-sudo yum install mysql -y
 mysql -h ecommerce-mysql.c9akciq32.eu-west-1.rds.amazonaws.com \
-      -u devops_user -p ecommerce_db < ecommerce_db.sql
+      -P 3306 \
+      -u devops_user \
+      -p \
+      ecommerce_db < ecommerce_db.sql
 ```
-(Remplace l'endpoint par celui que tu as copié à l'étape précédente)
-4. Arrêter l'EC2 bastion après l'import
 
-**Option B - AWS Systems Manager Session Manager :**
-Même principe mais sans port SSH exposé (plus sécurisé).
+> ℹ️ Même effet, juste sans vérification SSL du certificat. Pour un portfolio, **Option A avec SSL est plus professionnelle**.
+
+---
+
+**Option C - AWS Systems Manager Session Manager** (alternative sans EC2)
+
+Plus complexe à configurer mais pas d'instance EC2 à gérer. Contact ton DevOps interne pour l'accès IAM.
 
 ---
 
@@ -436,31 +498,39 @@ Cliquer **Store**
 
 ## 6. ECR - Registry Docker
 
-ECR hébergera vos images Docker dans AWS. Les images GHCR publiques seront copiées ici.
+ECR hébergera les images Docker du frontend. Les microservices resteront sur GitHub Container Registry (GHCR - public).
 
 **Navigation :** Barre de recherche → `ECR` → **Elastic Container Registry**
 
-### 6.1 Créer les repositories
+### 6.1 Créer le repository Frontend
 
-**Cliquer Create repository** - à répéter 5 fois :
+**Cliquer Create repository** - créer 1 seul repository :
 
-**Repository 1 - auth-service :**
+**Repository - Frontend :**
 
 | Champ | Valeur |
 |-------|--------|
 | Visibility settings | **Private** |
-| Repository name | `ecommerce/auth-service` |
+| Repository name | `ecommerce/frontend` |
 | Tag immutability | **Mutable** |
 | Scan on push | ✅ **Enabled** |
 | Encryption | **AES-256** |
 
-Cliquer **Create repository** - puis répéter pour les 4 suivants avec les noms :
-- `ecommerce/product-service`
-- `ecommerce/order-service`
-- `ecommerce/review-service`
-- `ecommerce/frontend`
+Cliquer **Create repository**
 
-**Ce que vous voyez :** 5 repositories dans la liste avec leur URI complet (ex. `123456789.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/auth-service`).
+**Ce que vous voyez :** 1 repository dans la liste avec son URI complet (ex. `123456789.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/frontend`)
+
+---
+
+### 6.2 Microservices sur GHCR (public)
+
+Les 4 microservices restent sur GitHub Container Registry (GHCR) :
+- `ghcr.io/yaraportfolio/auth-service:latest`
+- `ghcr.io/yaraportfolio/product-service:latest`
+- `ghcr.io/yaraportfolio/order-service:latest`
+- `ghcr.io/yaraportfolio/review-service:latest`
+
+Pas besoin de les créer dans ECR (déjà disponibles publiquement sur GHCR).
 
 ### 6.2 Voir les commandes de push
 
