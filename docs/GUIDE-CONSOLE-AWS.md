@@ -475,6 +475,25 @@ Cliquer **Store**
 
 ---
 
+---
+
+## 📝 Résumé des Registries (Stratégie Portfolio)
+
+**Frontend :**
+- Registry: **ECR** (Elastic Container Registry - AWS)
+- Accès: **Privé** (authentification AWS requise)
+- Deployment: EC2, Beanstalk, ou ECS
+
+**Microservices (4 services) :**
+- Registry: **GHCR** (GitHub Container Registry)
+- Accès: **Public** (pas d'authentification requise)
+- Services: auth-service, product-service, order-service, review-service
+- Repository: `ghcr.io/yaraportfolio/{service-name}`
+
+> 💡 Cette stratégie permet une gestion simple du portfolio : microservices publics sur GitHub (CI/CD GitHub Actions natif), frontend privé sur AWS (meilleures performances de déploiement).
+
+---
+
 ### Secret 2 - JWT Secret
 
 **Cliquer Store a new secret**
@@ -532,12 +551,6 @@ Les 4 microservices restent sur GitHub Container Registry (GHCR) :
 
 Pas besoin de les créer dans ECR (déjà disponibles publiquement sur GHCR).
 
-### 6.2 Voir les commandes de push
-
-**Cliquer sur `ecommerce/auth-service`** → Bouton **View push commands** en haut à droite.
-
-La console affiche les 4 commandes exactes à exécuter depuis votre machine pour pousser l'image. C'est un raccourci très pratique qui génère automatiquement la commande d'authentification avec votre Account ID et votre région.
-
 ---
 
 ## 7. EKS - Cluster Kubernetes
@@ -550,22 +563,36 @@ EKS crée et gère le control plane Kubernetes. Vous gérez les worker nodes via
 
 **Cliquer Add cluster → Create**
 
+**Configuration options :**
+
+Deux choix s'offrent à vous :
+
+| Option | Recommandé | Raison |
+|--------|-----------|--------|
+| **Quick configuration (with EKS Auto Mode)** | ✅ **OUI - Choisir ceci** | Automatisé, defaults production-grade, idéal pour portfolio |
+| Custom configuration | Non | Plus complexe, plus de contrôle (optionnel) |
+
+> 💡 **Pour un portfolio, "Quick configuration" est plus simple** : EKS Auto Mode automatise la création des nodes et de la provisioning.
+
+**Cliquer "Quick configuration (with EKS Auto Mode)"**
+
+---
+
 **Step 1 - Configure cluster :**
 
 | Champ | Valeur |
 |-------|--------|
 | Name | `ecommerce-cluster` |
-| Kubernetes version | **1.29** |
-| Cluster service role | Cliquer **Create recommended role** → copier l'ARN créé → coller ici |
+| Kubernetes version | **1.29** (ou plus récent) |
 
-> 💡 **Create recommended role** ouvre un onglet IAM et crée automatiquement le rôle avec les bonnes permissions. Retournez dans l'onglet EKS et rafraîchissez la liste.
+> 💡 Quick configuration utilise les defaults recommandés par AWS. Pas besoin de configurer le Cluster service role manuellement.
 
 **Step 2 - Specify networking :**
 
 | Champ | Valeur |
 |-------|--------|
 | VPC | `ecommerce-vpc` |
-| Subnets | Sélectionner les **6 subnets privés** (3 AZ × 2) |
+| Subnets | Sélectionner les **3 subnets EKS privés** (1 par AZ) |
 | Security groups | `ecommerce-sg-eks` |
 | Cluster endpoint access | **Public and private** |
 
@@ -576,6 +603,8 @@ EKS crée et gère le control plane Kubernetes. Vous gérez les worker nodes via
 - ✅ kube-proxy
 - ✅ Amazon VPC CNI
 - ✅ Amazon EBS CSI Driver
+- ✅ Metrics Server (requis pour HPA/autoscaling)
+- ✅ AWS Secrets and Configuration Provider (optionnel - seulement si vous utilisez AWS Secrets Manager)
 
 **Step 5 - Configure selected add-ons settings :** Laisser les versions par défaut
 
@@ -585,82 +614,93 @@ Attendre **~12 minutes** que le statut passe à `Active`.
 
 ---
 
-### 7.2 Ajouter un Node Group
+### 7.2 Node Pools (Gérés automatiquement avec EKS Auto Mode)
 
-**Navigation :** EKS → **Clusters** → `ecommerce-cluster` → Onglet **Compute** → **Add node group**
+> ℹ️ **Avec "Quick configuration (with EKS Auto Mode)", AWS gère TOUS les nodes automatiquement.**
+>
+> **Vous n'avez RIEN à faire ici !** Les node pools sont visibles dans la console mais gérés 100% par AWS.
+> - Scaling automatique ✅
+> - Santé des nodes vérifiée ✅
+> - Mises à jour gérées ✅
+> - Pas de Node Groups à créer manuellement
 
-**Step 1 - Configure node group :**
+**Vérification :** EKS → `ecommerce-cluster` → Onglet **Compute**
+- Vous verrez 2 node pools pré-créés : `general-purpose` et `system`
+- Vous verrez N nodes Ready (créés automatiquement)
+- **C'est tout ce qu'il faut ! Passez à l'étape 7.3.**
 
-| Champ | Valeur |
-|-------|--------|
-| Name | `ecommerce-nodes` |
-| Node IAM role | Cliquer **Create recommended role** (comme pour le cluster) |
-
-**Step 2 - Set compute and scaling configuration :**
-
-| Champ | Valeur |
-|-------|--------|
-| AMI type | **Amazon Linux 2 (AL2_x86_64)** |
-| Capacity type | **On-Demand** |
-| Instance types | `t3.medium` |
-| Disk size | `20` GiB |
-| Minimum size | `2` |
-| Maximum size | `6` |
-| Desired size | `3` |
-
-**Step 3 - Specify networking :**
-- Subnets : Sélectionner les **subnets privés** (pas publics - les nodes ne doivent pas être exposés)
-- ✅ Configure SSH access to nodes → optionnel mais utile pour le debug
-
-**Step 4 - Review and create → Create**
-
-Attendre **~5 minutes**.
+> 💡 **Advanced (optionnel)** : Si vous avez besoin de configurations très spécifiques, vous pouvez créer des Node Groups manuels via **Add node group**, mais ce n'est pas recommandé pour un portfolio simple.
 
 ---
 
-### 7.3 Configurer kubectl (depuis votre machine)
+### 7.3 Configurer kubectl
 
-Après création du cluster, ouvrez votre terminal local et connectez kubectl :
+**Option A : Via AWS Console (le plus simple) ✅**
+
+EKS → `ecommerce-cluster` → Bouton **"Connect"** (en haut à droite)
+
+AWS CloudShell s'ouvre automatiquement avec kubectl configuré.
+
+```bash
+# La commande s'affiche automatiquement
+source kubectl-connect ecommerce-cluster
+
+# Vérifier les nodes
+kubectl get nodes
+# Les nodes doivent apparaître avec le statut Ready
+# (nombre variable avec EKS Auto Mode - 2, 3, 4+ selon la charge)
+```
+
+---
+
+**Option B : Via votre machine locale (si vous préférez)**
+
+Depuis votre terminal local (avec AWS CLI + kubectl installés) :
 
 ```bash
 aws eks update-kubeconfig --region eu-west-1 --name ecommerce-cluster
 kubectl get nodes
-# Les 3 nodes doivent apparaître avec le statut Ready
 ```
 
 ---
 
 ### 7.4 Déployer les microservices via Helm
 
-Depuis votre terminal, dans le dossier `ecommerce-k8s-helm` :
+#### Déploiement EKS (AWS Secrets Manager + CSI Driver) ✅
 
 ```bash
-# Créer les secrets Kubernetes
+# Créer le namespace
 kubectl create namespace ecommerce
 
-kubectl create secret generic ecommerce-secrets \
-  --namespace ecommerce \
-  --from-literal=DB_HOST="<endpoint_mysql_copié_étape_4>" \
-  --from-literal=DB_PORT="3306" \
-  --from-literal=DB_NAME="ecommerce_db" \
-  --from-literal=DB_USER="devops_user" \
-  --from-literal=DB_PASSWORD="VotreMotDePasse" \
-  --from-literal=JWT_SECRET="VotreJwtSecret"
-
-# Déployer via Helm
+# Déployer via Helm (AVEC AWS Secrets Manager)
+# Note: Remplacer ROLE_ARN par l'ARN de votre rôle IAM créé précédemment
 helm install ecommerce-microservices . \
   --namespace ecommerce \
-  --set image.ecr.registry="<account_id>.dkr.ecr.eu-west-1.amazonaws.com" \
-  --set image.ecr.owner="ecommerce" \
-  --set services.authService.image.tag="v3.3" \
-  --set services.productService.image.tag="v3.3" \
-  --set services.orderService.image.tag="v3.3" \
-  --set services.reviewService.image.tag="v3.3"
+  --set image.registryType="ghcr" \
+  --set image.ghcr.registry="ghcr.io" \
+  --set image.ghcr.owner="yaraportfolio" \
+  --set awsSecretsManager.enabled=true \
+  --set awsSecretsManager.region=eu-west-1 \
+  --set awsSecretsManager.iamRoleArn="arn:aws:iam::020379956170:role/ecommerce-eks-secrets-role"
 ```
+
+**Prérequis :**
+- ✅ ASCP add-on installé sur le cluster EKS
+- ✅ Rôle IAM `ecommerce-eks-secrets-role` créé avec IRSA
+- ✅ 2 secrets créés dans AWS Secrets Manager : `ecommerce/db/credentials` et `ecommerce/jwt/secret`
+
+---
 
 **Vérifier dans la console EKS :**  
 EKS → `ecommerce-cluster` → **Resources** → **Pods** → Namespace `ecommerce`  
 Vous devez voir 8 pods (2 réplicas × 4 services) avec le statut `Running`.
+
+**Vérifier les ressources CSI :**
+```bash
+kubectl get secretproviderclass -n ecommerce
+kubectl get serviceaccount ecommerce-sa -n ecommerce
+kubectl get secret microservices-secret -n ecommerce  # auto-créé par CSI
+```
 
 ---
 

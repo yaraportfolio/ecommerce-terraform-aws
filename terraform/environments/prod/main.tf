@@ -38,7 +38,7 @@ data "aws_caller_identity" "current" {}
 module "vpc"                { source = "../../modules/vpc"; project = var.project; environment = var.environment; aws_region = var.aws_region; vpc_cidr = var.vpc_cidr }
 module "sg"                 { source = "../../modules/sg"; project = var.project; environment = var.environment; vpc_id = module.vpc.vpc_id }
 module "rds"                { source = "../../modules/rds"; project = var.project; environment = var.environment; vpc_id = module.vpc.vpc_id; db_subnet_ids = module.vpc.db_subnet_ids; sg_rds_id = module.sg.sg_rds_id; db_name = var.db_name; db_username = var.db_username; db_password = var.db_password; instance_class = var.rds_instance_class }
-module "ecr"                { source = "../../modules/ecr"; project = var.project; services = ["auth-service", "product-service", "order-service", "review-service", "frontend"] }
+module "ecr"                { source = "../../modules/ecr"; project = var.project; services = ["frontend"] }
 module "eks"                { source = "../../modules/eks"; project = var.project; environment = var.environment; aws_region = var.aws_region; vpc_id = module.vpc.vpc_id; private_subnet_ids = module.vpc.private_subnet_ids; sg_eks_id = module.sg.sg_eks_id; node_instance_type = var.eks_node_instance_type; node_min_size = var.eks_node_min; node_max_size = var.eks_node_max; node_desired = var.eks_node_desired }
 module "alb"                { source = "../../modules/alb"; project = var.project; environment = var.environment; vpc_id = module.vpc.vpc_id; public_subnet_ids = module.vpc.public_subnet_ids; sg_alb_id = module.sg.sg_alb_id; certificate_arn = var.certificate_arn }
 module "frontend_ec2"       { source = "../../modules/frontend-ec2"; project = var.project; environment = var.environment; vpc_id = module.vpc.vpc_id; public_subnet_ids = module.vpc.public_subnet_ids; sg_frontend_id = module.sg.sg_frontend_id; ecr_frontend_url = module.ecr.repository_urls["frontend"]; backend_url = "http://${module.eks.internal_alb_dns}"; alb_tg_arn = module.alb.target_group_arn; enabled = var.frontend_mode == "ec2" }
@@ -52,9 +52,11 @@ resource "helm_release" "microservices" {
   create_namespace = true
   depends_on       = [module.eks]
 
-  set { name = "image.registryType"; value = "ecr" }
-  set { name = "image.ecr.registry"; value = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com" }
-  set { name = "image.ecr.owner"; value = var.project }
+  # Microservices use GHCR (public GitHub Container Registry)
+  # Frontend uses ECR (private AWS registry) - configured in Helm values separately
+  set { name = "image.registryType"; value = "ghcr" }
+  set { name = "image.ghcr.registry"; value = "ghcr.io" }
+  set { name = "image.ghcr.owner"; value = "yaraportfolio" }
   set { name = "services.authService.image.tag"; value = var.microservices_image_tag }
   set { name = "services.productService.image.tag"; value = var.microservices_image_tag }
   set { name = "services.orderService.image.tag"; value = var.microservices_image_tag }

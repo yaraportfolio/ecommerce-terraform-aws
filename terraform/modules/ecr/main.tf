@@ -1,3 +1,5 @@
+# ECR Repository - Frontend ONLY
+# Microservices use GHCR (GitHub Container Registry - public)
 resource "aws_ecr_repository" "services" {
   for_each             = toset(var.services)
   name                 = "${var.project}/${each.key}"
