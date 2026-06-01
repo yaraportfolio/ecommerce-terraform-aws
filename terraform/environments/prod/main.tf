@@ -59,7 +59,7 @@ resource "helm_release" "microservices" {
   set { name = "services.productService.image.tag"; value = var.microservices_image_tag }
   set { name = "services.orderService.image.tag"; value = var.microservices_image_tag }
   set { name = "services.reviewService.image.tag"; value = var.microservices_image_tag }
-  set { name = "database.host"; value = module.rds.cluster_endpoint }
+  set { name = "database.host"; value = module.rds.endpoint }
   set { name = "database.name"; value = var.db_name }
   set { name = "database.user"; value = var.db_username }
   set_sensitive { name = "database.password"; value = var.db_password }
@@ -89,6 +89,6 @@ module "observability" {
   aws_account_id  = data.aws_caller_identity.current.account_id
   cluster_name    = module.eks.cluster_name
   alb_arn_suffix  = module.alb.alb_arn_suffix
-  db_cluster_id   = module.rds.cluster_id
+  db_cluster_id   = module.rds.instance_id
   alert_email     = var.alert_email
 }

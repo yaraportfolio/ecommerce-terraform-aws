@@ -1,6 +1,6 @@
 # Guide de Déploiement Manuel AWS - E-Commerce Microservices
 **Auteur :** Yara Mahi Mohamed  
-**Stack :** React 18 + NGINX | Node.js 20 microservices | MariaDB → RDS Aurora | EKS + Helm  
+**Stack :** React 18 + NGINX | Node.js 20 microservices | MariaDB → RDS MySQL | EKS + Helm  
 **Objectif :** Déployer manuellement pour comprendre chaque couche avant d'automatiser avec Terraform
 
 ---
@@ -10,7 +10,7 @@
 1. [Prérequis & Configuration AWS CLI](#1-prérequis--configuration-aws-cli)
 2. [VPC & Réseau](#2-vpc--réseau)
 3. [Security Groups](#3-security-groups)
-4. [RDS Aurora (MySQL compatible MariaDB)](#4-rds-aurora-mysql-compatible-mariadb)
+4. [RDS MySQL](#4-rds-mysql)
 5. [ECR - Registry des images Docker](#5-ecr--registry-des-images-docker)
 6. [EKS - Cluster Kubernetes (microservices)](#6-eks--cluster-kubernetes-microservices)
 7. [Déploiement Helm sur EKS](#7-déploiement-helm-sur-eks)
@@ -351,9 +351,9 @@ echo "SG RDS : $SG_RDS"
 
 ---
 
-## 4. RDS Aurora (MySQL compatible MariaDB)
+## 4. RDS MySQL
 
-Aurora MySQL est compatible avec MariaDB 10.11 - vos schémas et drivers `mysql2` fonctionnent sans modification.
+MySQL 8.0 est compatible avec MariaDB 10.11 - vos schémas et drivers `mysql2` fonctionnent sans modification.
 
 ### Stocker les secrets dans AWS Secrets Manager
 
@@ -361,7 +361,7 @@ Aurora MySQL est compatible avec MariaDB 10.11 - vos schémas et drivers `mysql2
 # Créer le secret DB (évite de mettre le mot de passe en clair dans les commandes)
 aws secretsmanager create-secret \
   --name "$PROJECT/db/credentials" \
-  --description "Credentials RDS Aurora ecommerce" \
+  --description "Credentials RDS MySQL ecommerce" \
   --secret-string "{\"username\":\"$DB_USER\",\"password\":\"$DB_PASSWORD\"}"
 
 echo "Secret DB créé dans Secrets Manager"
@@ -379,14 +379,15 @@ aws rds create-db-subnet-group \
 echo "Subnet group RDS créé"
 ```
 
-### Cluster Aurora MySQL
+### Instance MySQL 8.0
 
 ```bash
-# Créer le cluster Aurora (compatible MySQL 8.0 ≈ MariaDB 10.11)
-aws rds create-db-cluster \
-  --db-cluster-identifier "$PROJECT-aurora-cluster" \
-  --engine aurora-mysql \
-  --engine-version "8.0.mysql_aurora.3.05.2" \
+# Créer l'instance MySQL (compatible MariaDB 10.11)
+aws rds create-db-instance \
+  --db-instance-identifier "$PROJECT-mysql" \
+  --db-instance-class "db.t3.micro" \
+  --engine mysql \
+  --engine-version "8.0.35" \
   --master-username $DB_USER \
   --master-user-password $DB_PASSWORD \
   --database-name $DB_NAME \
@@ -396,34 +397,21 @@ aws rds create-db-cluster \
   --preferred-backup-window "02:00-03:00" \
   --preferred-maintenance-window "mon:04:00-mon:05:00" \
   --storage-encrypted \
+  --allocated-storage 20 \
+  --multi-az \
   --no-deletion-protection \
-  --tags Key=Name,Value=$PROJECT-aurora-cluster Key=Env,Value=$ENV
+  --tags Key=Name,Value=$PROJECT-mysql Key=Env,Value=$ENV
 
-echo "Cluster Aurora en création (~5min)..."
-```
-
-### Instance primaire Aurora
-
-```bash
-aws rds create-db-instance \
-  --db-instance-identifier "$PROJECT-aurora-primary" \
-  --db-cluster-identifier "$PROJECT-aurora-cluster" \
-  --db-instance-class "db.t3.medium" \
-  --engine aurora-mysql \
-  --publicly-accessible false \
-  --tags Key=Name,Value=$PROJECT-aurora-primary Key=Env,Value=$ENV
-
-# Attendre que l'instance soit disponible (~8min)
-echo "Attente instance Aurora (~8min)..."
+echo "Attente instance MySQL (~8min)..."
 aws rds wait db-instance-available \
-  --db-instance-identifier "$PROJECT-aurora-primary"
+  --db-instance-identifier "$PROJECT-mysql"
 
 # Récupérer l'endpoint
-DB_ENDPOINT=$(aws rds describe-db-clusters \
-  --db-cluster-identifier "$PROJECT-aurora-cluster" \
-  --query 'DBClusters[0].Endpoint' --output text)
+DB_ENDPOINT=$(aws rds describe-db-instances \
+  --db-instance-identifier "$PROJECT-mysql" \
+  --query 'DBInstances[0].Endpoint.Address' --output text)
 
-echo "✅ RDS Aurora endpoint : $DB_ENDPOINT"
+echo "✅ RDS MySQL endpoint : $DB_ENDPOINT"
 export DB_ENDPOINT
 ```
 
@@ -904,7 +892,7 @@ aws elasticbeanstalk create-environment \
   --option-settings \
     Namespace=aws:autoscaling:asg,OptionName=MinSize,Value=2 \
     Namespace=aws:autoscaling:asg,OptionName=MaxSize,Value=6 \
-    Namespace=aws:autoscaling:launchconfiguration,OptionName=InstanceType,Value=t3.medium \
+    Namespace=aws:autoscaling:launchconfiguration,OptionName=InstanceType,Value=t3.small \
     Namespace=aws:autoscaling:launchconfiguration,OptionName=SecurityGroups,Value=$SG_FRONTEND \
     Namespace=aws:ec2:vpc,OptionName=VPCId,Value=$VPC_ID \
     Namespace=aws:ec2:vpc,OptionName=Subnets,Value="$SUBNET_PUB_A,$SUBNET_PUB_B" \

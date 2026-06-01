@@ -124,7 +124,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
   period              = 60
   statistic           = "Average"
   threshold           = 80
-  alarm_description   = "CPU Aurora trop élevé"
+  alarm_description   = "CPU MySQL trop élevé"
   dimensions          = { DBClusterIdentifier = var.db_cluster_id }
   alarm_actions       = var.sns_alert_arn != "" ? [var.sns_alert_arn] : []
   tags                = { Name = "${var.project}-rds-cpu-alarm" }
@@ -140,7 +140,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_connections" {
   period              = 60
   statistic           = "Maximum"
   threshold           = 150
-  alarm_description   = "Trop de connexions ouvertes sur Aurora"
+  alarm_description   = "Trop de connexions ouvertes sur MySQL"
   dimensions          = { DBClusterIdentifier = var.db_cluster_id }
   alarm_actions       = var.sns_alert_arn != "" ? [var.sns_alert_arn] : []
   tags                = { Name = "${var.project}-rds-conn-alarm" }
@@ -178,7 +178,7 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric"
         properties = {
-          title  = "RDS Aurora - CPU %"
+          title  = "RDS MySQL - CPU %"
           period = 60
           stat   = "Average"
           metrics = [["AWS/RDS", "CPUUtilization",
@@ -190,7 +190,7 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric"
         properties = {
-          title  = "RDS Aurora - Connexions"
+          title  = "RDS MySQL - Connexions"
           period = 60
           stat   = "Maximum"
           metrics = [["AWS/RDS", "DatabaseConnections",

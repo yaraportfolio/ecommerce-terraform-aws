@@ -1,7 +1,7 @@
 # Architecture - E-Commerce Microservices sur AWS
 
 **Auteur :** Yara Mahi Mohamed | Portfolio DevOps & SRE  
-**Stack :** React 18 + NGINX · Node.js 20 · MariaDB → RDS Aurora MySQL · EKS + Helm  
+**Stack :** React 18 + NGINX · Node.js 20 · MariaDB → RDS MySQL · EKS + Helm  
 **Région principale :** `eu-west-1` (Irlande)
 
 ---
@@ -17,7 +17,7 @@
 7. [Load Balancer public](#7-load-balancer-public)
 8. [EKS - cluster Kubernetes](#8-eks--cluster-kubernetes)
 9. [Microservices](#9-microservices)
-10. [Base de données - RDS Aurora](#10-base-de-données--rds-aurora)
+10. [Base de données - RDS MySQL](#10-base-de-données--rds-mysql)
 11. [Registry - ECR](#11-registry--ecr)
 12. [Secrets & IAM](#12-secrets--iam)
 13. [Observabilité](#13-observabilité)
@@ -54,7 +54,7 @@ auth:3001  product:3002  order:3003  review:3004
     │           │             │            │
     └───────────┴─────────────┴────────────┘
                        │ MySQL :3306
-                 RDS Aurora MySQL
+                 RDS MySQL
                   (ecommerce_db)
 ```
 
@@ -62,11 +62,11 @@ auth:3001  product:3002  order:3003  review:3004
 
 | Infra locale | Équivalent AWS | Note |
 |-------------|----------------|------|
-| IP fixe `192.168.56.115` (MariaDB) | RDS Aurora endpoint DNS | Bascule automatique en cas de panne |
+| IP fixe `192.168.56.115` (MariaDB) | RDS MySQL endpoint DNS | Bascule automatique en cas de panne |
 | IP fixe `192.168.56.111` (K8s NodePort 30080) | ALB interne EKS | Créé automatiquement par AWS LB Controller |
 | IP fixe `192.168.56.114` (Frontend VM) | ALB public + ASG/Beanstalk/ECS | Remplacé par une couche managée |
 | GHCR (`ghcr.io/yaraportfolio/*`) | ECR (`ACCOUNT.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/*`) | Images migrées au premier déploiement |
-| MariaDB 10.11 | Aurora MySQL 8.0 | 100% compatible - drivers `mysql2` et schéma SQL inchangés |
+| MariaDB 10.11 | MySQL 8.0 | 100% compatible - drivers `mysql2` et schéma SQL inchangés |
 
 **Ce qui ne change pas :** le code des microservices, le Helm chart, l'image Docker frontend, la variable `BACKEND_URL` injectée par `envsubst`, et le schéma `ecommerce_db.sql`.
 
@@ -130,10 +130,9 @@ auth:3001  product:3002  order:3003  review:3004
 │  │  Subnets DB - 10.0.20-21.0/24 (eu-west-1a/b)                          │   │
 │  │                                                                       │   │
 │  │    ┌────────────────────────────────────────┐                         │   │
-│  │    │  RDS Aurora MySQL - ecommerce-cluster  │                         │   │
-│  │    │  Writer endpoint : cluster-xxx.rds.aws │                         │   │
-│  │    │  Reader endpoint : ro-cluster-xxx      │                         │   │
-│  │    │  db.t3.medium · Multi-AZ · chiffré     │                         │   │
+│  │    │  RDS MySQL - ecommerce-mysql           │                         │   │
+│  │    │  Endpoint : mysql-xxx.rds.aws          │                         │   │
+│  │    │  db.t3.micro · Multi-AZ · chiffré      │                         │   │
 │  │    │  ecommerce_db · backups 7 jours        │                         │   │
 │  │    └────────────────────────────────────────┘                         │   │
 │  │                SG-RDS : :3306 ← SG-EKS uniquement                     │   │
@@ -215,8 +214,8 @@ Tags Kubernetes obligatoires sur ces subnets :
 
 | Nom | CIDR | AZ | Ressources |
 |-----|------|----|-----------|
-| ecommerce-db-a | 10.0.20.0/24 | eu-west-1a | RDS Aurora primary |
-| ecommerce-db-b | 10.0.21.0/24 | eu-west-1b | RDS Aurora replica |
+| ecommerce-db-a | 10.0.20.0/24 | eu-west-1a | RDS MySQL primary |
+| ecommerce-db-b | 10.0.21.0/24 | eu-west-1b | RDS MySQL standby |
 
 ### Tables de routage
 
@@ -526,7 +525,7 @@ Les secrets DB et JWT sont passés en `--set-sensitive` dans Terraform ou créé
 
 ## 9. Microservices
 
-Les quatre microservices sont des applications Node.js 20 / Express identiques en structure. Ils partagent la même base de données `ecommerce_db` sur RDS Aurora et le même `JWT_SECRET`.
+Les quatre microservices sont des applications Node.js 20 / Express identiques en structure. Ils partagent la même base de données `ecommerce_db` sur RDS MySQL et le même `JWT_SECRET`.
 
 ### auth-service - Port 3001
 
@@ -637,21 +636,18 @@ Sur EKS, si le Prometheus Operator est déployé, les `ServiceMonitor` du Helm c
 
 ---
 
-## 10. Base de données - RDS Aurora
+## 10. Base de données - RDS MySQL
 
-### Choix Aurora vs RDS MySQL classique
+### Configuration MySQL 8.0
 
-Aurora MySQL a été choisi pour plusieurs raisons :
+MySQL 8.0 est compatible avec MariaDB 10.11 déployée localement. Votre schéma `ecommerce_db.sql`, vos drivers `mysql2` Node.js, et vos requêtes SQL fonctionnent sans modification. Le seul changement est l'endpoint de connexion.
 
-**Compatibilité :** Aurora MySQL 8.0 est compatible avec MariaDB 10.11. Votre schéma `ecommerce_db.sql`, vos drivers `mysql2` Node.js, et vos requêtes SQL fonctionnent sans modification. Le seul changement est l'endpoint de connexion.
-
-**Performance :** Aurora utilise un storage distribué qui réplique automatiquement les données en 6 copies sur 3 AZ. Le failover (bascule vers le reader) prend ~30 secondes contre ~1-2 minutes pour RDS MySQL Multi-AZ.
-
-**Endpoints distincts :** Aurora expose deux endpoints :
-- **Writer endpoint** : pointe toujours vers l'instance primaire. À utiliser pour toutes les opérations d'écriture (INSERT, UPDATE, DELETE)
-- **Reader endpoint** : round-robin entre toutes les replicas. À utiliser pour les requêtes de lecture
-
-Dans cette architecture, tous les microservices utilisent le writer endpoint pour simplifier. En production haute charge, product-service et review-service (lectures dominantes) peuvent être configurés pour utiliser le reader endpoint.
+**Caractéristiques MySQL 8.0 sur RDS :**
+- **Compatibilité :** drivers `mysql2` et schéma SQL inchangés
+- **Multi-AZ :** réplication synchrone vers un standby dans une AZ différente. Failover automatique en ~30 secondes en cas de panne
+- **Chiffrement :** AES-256 au repos et SSL en transit
+- **Backups automatiques :** 7 jours de rétention
+- **Instance class :** db.t3.micro pour le portfolio (2GB RAM, 2vCPU partagés)
 
 ### Schéma de base de données
 
@@ -720,21 +716,21 @@ CREATE TABLE reviews (
 );
 ```
 
-### Configuration Aurora
+### Configuration MySQL 8.0
 
 | Paramètre | Valeur |
 |-----------|--------|
-| Engine | Aurora MySQL 8.0.mysql_aurora.3.05.2 |
-| Instance class | db.t3.medium |
-| Storage | Auto-scaling jusqu'à 128 TB |
-| Multi-AZ | Oui (replica en eu-west-1b) |
+| Engine | MySQL 8.0.35 |
+| Instance class | db.t3.micro |
+| Storage | 20 GB |
+| Multi-AZ | Oui (standby en eu-west-1b) |
 | Chiffrement | AES-256 (at rest) |
-| SSL en transit | Oui (forcé par défaut Aurora) |
+| SSL en transit | Oui |
 | Backups automatiques | 7 jours |
 | Fenêtre de backup | 02:00-03:00 UTC |
 | Fenêtre de maintenance | Lundi 04:00-05:00 UTC |
-| Deletion protection | Activée en prod |
-| Enhanced Monitoring | 60s granularity |
+| Deletion protection | Désactivée en dev |
+| Enhanced Monitoring | Désactivé en dev |
 
 ### Connexion depuis les microservices
 
@@ -743,7 +739,7 @@ CREATE TABLE reviews (
 const mysql = require('mysql2/promise');
 
 const pool = mysql.createPool({
-  host: process.env.DB_HOST,      // Writer endpoint Aurora
+  host: process.env.DB_HOST,      // Endpoint MySQL
   port: process.env.DB_PORT,
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
@@ -751,7 +747,7 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   connectTimeout: 60000,
-  // SSL requis pour Aurora en production
+  // SSL requis pour MySQL en production
   ssl: { rejectUnauthorized: false }
 });
 ```
@@ -907,7 +903,7 @@ Les VPC Flow Logs capturent les métadonnées de chaque connexion réseau dans l
    → Pas d'auth requise (route publique)
    → mysql2 → connexion pool vers writer endpoint Aurora
 
-8. RDS Aurora MySQL
+8. RDS MySQL
    → SELECT * FROM products ORDER BY created_at DESC
    → Retourne les résultats
 
@@ -955,7 +951,7 @@ Les VPC Flow Logs capturent les métadonnées de chaque connexion réseau dans l
 | OKE (Oracle Kubernetes Engine) | EKS | OKE nodes peuvent être dans des subnets publics ou privés. EKS recommande privés uniquement |
 | Load Balancer OCI (stateful) | ALB | ALB opère en L7 uniquement. OCI LB supporte L4+L7 dans la même ressource |
 | OCR (Oracle Container Registry) | ECR | ECR a le scan de vulnérabilités intégré (payant au-delà du Free Tier) |
-| Autonomous Database / DBCS | RDS Aurora | Aurora MySQL compatible MariaDB. Schéma et drivers inchangés |
+| Autonomous Database / DBCS | RDS MySQL | MySQL 8.0 compatible MariaDB 10.11. Schéma et drivers inchangés |
 | Resource Manager (Terraform natif) | - / Terraform | AWS n'a pas de Terraform natif. CloudFormation est l'IaC natif AWS, Terraform reste populaire |
 | OCI Vault | Secrets Manager | Secrets Manager peut faire la rotation automatique des credentials RDS |
 | OCI Monitoring | CloudWatch | CloudWatch combine métriques, logs, traces (vs services séparés sur OCI) |
@@ -1013,7 +1009,7 @@ Estimation pour un usage modéré en `eu-west-1`, hors Free Tier.
 |---------|--------|-----------|
 | EKS Cluster | Control plane | ~$73 |
 | EC2 Nodes EKS | 3 × t3.medium On-Demand | ~$90 |
-| RDS Aurora | 1 instance db.t3.medium | ~$55 |
+| RDS MySQL | 1 instance db.t3.micro | ~$15 |
 | NAT Gateway | 2 × ($0.045/h × 730h) | ~$66 |
 | ALB public | ~$16 + $0.008/LCU | ~$20 |
 | ECR | 5 repos, ~5 GB images | ~$5 |
@@ -1026,7 +1022,7 @@ Estimation pour un usage modéré en `eu-west-1`, hors Free Tier.
 |---------|--------|-----------|
 | CloudFront | 1 TB de données servies | ~$9 |
 | NAT Gateway trafic | 10 GB (pulls ECR, AWS SDK) | ~$0.45 |
-| RDS Aurora storage | ~20 GB × $0.12 | ~$2.4 |
+| RDS MySQL storage | ~20 GB × $0.12 | ~$2.4 |
 | CloudWatch Logs | 5 GB ingested | ~$2.5 |
 
 ### Total estimé
