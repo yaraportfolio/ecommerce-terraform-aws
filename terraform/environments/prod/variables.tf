@@ -14,5 +14,5 @@ variable "eks_node_max"             { default = 6 }
 variable "eks_node_desired"         { default = 3 }
 variable "frontend_mode"            { default = "ec2"; description = "ec2 | beanstalk | ecs" }
 variable "microservices_image_tag"  { default = "v3.3" }
-variable "domain_name"  { default = "" ; description = "ex: ecommerce.votredomaine.com — laisser vide pour utiliser le DNS CloudFront" }
+variable "domain_name"  { default = "" ; description = "ex: ecommerce.votredomaine.com - laisser vide pour utiliser le DNS CloudFront" }
 variable "alert_email"  { default = "" ; description = "Email pour les alertes CloudWatch SNS" }

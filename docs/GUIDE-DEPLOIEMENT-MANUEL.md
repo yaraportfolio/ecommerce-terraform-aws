@@ -1,4 +1,4 @@
-# Guide de Déploiement Manuel AWS — E-Commerce Microservices
+# Guide de Déploiement Manuel AWS - E-Commerce Microservices
 **Auteur :** Yara Mahi Mohamed  
 **Stack :** React 18 + NGINX | Node.js 20 microservices | MariaDB → RDS Aurora | EKS + Helm  
 **Objectif :** Déployer manuellement pour comprendre chaque couche avant d'automatiser avec Terraform
@@ -11,12 +11,12 @@
 2. [VPC & Réseau](#2-vpc--réseau)
 3. [Security Groups](#3-security-groups)
 4. [RDS Aurora (MySQL compatible MariaDB)](#4-rds-aurora-mysql-compatible-mariadb)
-5. [ECR — Registry des images Docker](#5-ecr--registry-des-images-docker)
-6. [EKS — Cluster Kubernetes (microservices)](#6-eks--cluster-kubernetes-microservices)
+5. [ECR - Registry des images Docker](#5-ecr--registry-des-images-docker)
+6. [EKS - Cluster Kubernetes (microservices)](#6-eks--cluster-kubernetes-microservices)
 7. [Déploiement Helm sur EKS](#7-déploiement-helm-sur-eks)
-8. [Frontend — Option A : EC2 + ASG](#8-frontend--option-a--ec2--asg)
-9. [Frontend — Option B : Elastic Beanstalk](#9-frontend--option-b--elastic-beanstalk)
-10. [Frontend — Option C : ECS Fargate](#10-frontend--option-c--ecs-fargate)
+8. [Frontend - Option A : EC2 + ASG](#8-frontend--option-a--ec2--asg)
+9. [Frontend - Option B : Elastic Beanstalk](#9-frontend--option-b--elastic-beanstalk)
+10. [Frontend - Option C : ECS Fargate](#10-frontend--option-c--ecs-fargate)
 11. [ALB Public & Routing](#11-alb-public--routing)
 12. [CloudFront + Route 53](#12-cloudfront--route-53)
 13. [Vérification End-to-End](#13-vérification-end-to-end)
@@ -131,7 +131,7 @@ echo "IGW : $IGW_ID"
 ### Subnets publics (3 AZ)
 
 ```bash
-# AZ-a — subnet public frontend + ALB
+# AZ-a - subnet public frontend + ALB
 SUBNET_PUB_A=$(aws ec2 create-subnet \
   --vpc-id $VPC_ID \
   --cidr-block "10.0.1.0/24" \
@@ -273,7 +273,7 @@ echo "✅ Réseau complet"
 
 Règle d'or : les SGs référencent d'autres SGs (pas des CIDRs) pour les communications internes.
 
-### SG — ALB public (frontend)
+### SG - ALB public (frontend)
 
 ```bash
 SG_ALB=$(aws ec2 create-security-group \
@@ -292,7 +292,7 @@ aws ec2 authorize-security-group-ingress --group-id $SG_ALB \
 echo "SG ALB : $SG_ALB"
 ```
 
-### SG — Frontend EC2 / Beanstalk / ECS
+### SG - Frontend EC2 / Beanstalk / ECS
 
 ```bash
 SG_FRONTEND=$(aws ec2 create-security-group \
@@ -309,7 +309,7 @@ aws ec2 authorize-security-group-ingress --group-id $SG_FRONTEND \
 echo "SG Frontend : $SG_FRONTEND"
 ```
 
-### SG — EKS Nodes (microservices)
+### SG - EKS Nodes (microservices)
 
 ```bash
 SG_EKS=$(aws ec2 create-security-group \
@@ -332,7 +332,7 @@ aws ec2 authorize-security-group-ingress --group-id $SG_EKS \
 echo "SG EKS : $SG_EKS"
 ```
 
-### SG — RDS (base de données)
+### SG - RDS (base de données)
 
 ```bash
 SG_RDS=$(aws ec2 create-security-group \
@@ -353,7 +353,7 @@ echo "SG RDS : $SG_RDS"
 
 ## 4. RDS Aurora (MySQL compatible MariaDB)
 
-Aurora MySQL est compatible avec MariaDB 10.11 — vos schémas et drivers `mysql2` fonctionnent sans modification.
+Aurora MySQL est compatible avec MariaDB 10.11 - vos schémas et drivers `mysql2` fonctionnent sans modification.
 
 ### Stocker les secrets dans AWS Secrets Manager
 
@@ -442,7 +442,7 @@ echo "✅ Schéma importé"
 
 ---
 
-## 5. ECR — Registry des images Docker
+## 5. ECR - Registry des images Docker
 
 Les images sont sur GHCR publiquement, mais pour la prod AWS on les copie sur ECR.
 
@@ -507,7 +507,7 @@ cd ..
 
 ---
 
-## 6. EKS — Cluster Kubernetes (microservices)
+## 6. EKS - Cluster Kubernetes (microservices)
 
 ### Créer le cluster EKS avec eksctl
 
@@ -650,7 +650,7 @@ image:
   imagePullSecrets:
     enabled: false  # Les nodes EKS ont déjà accès ECR via IAM
 
-# Pas de password en clair ici — injecté via secretRef Kubernetes
+# Pas de password en clair ici - injecté via secretRef Kubernetes
 database:
   host: "$DB_ENDPOINT"
   port: 3306
@@ -768,7 +768,7 @@ export INTERNAL_ALB
 
 ---
 
-## 8. Frontend — Option A : EC2 + ASG
+## 8. Frontend - Option A : EC2 + ASG
 
 EC2 classique avec Auto Scaling Group. Contrôle total, idéal pour comprendre le mécanisme de base.
 
@@ -857,7 +857,7 @@ echo "✅ ASG EC2 créé"
 
 ---
 
-## 9. Frontend — Option B : Elastic Beanstalk
+## 9. Frontend - Option B : Elastic Beanstalk
 
 PaaS géré. Beanstalk gère le provisionning EC2, l'ALB et l'autoscaling automatiquement.
 
@@ -915,7 +915,7 @@ echo "Beanstalk en déploiement (~5min)..."
 
 ---
 
-## 10. Frontend — Option C : ECS Fargate
+## 10. Frontend - Option C : ECS Fargate
 
 Conteneurs managés sans gérer de serveurs. Idéal pour comprendre le modèle serverless containers.
 
@@ -1126,7 +1126,7 @@ echo "CloudFront en déploiement (~10min)..."
 ```bash
 echo "=== VÉRIFICATION COMPLÈTE ==="
 
-# 1. EKS — microservices
+# 1. EKS - microservices
 echo "--- Pods EKS ---"
 kubectl get pods -n ecommerce
 
@@ -1184,7 +1184,7 @@ echo "API test : curl https://$ALB_DNS/api/products"
 
 ---
 
-## Annexe A — Cluster Autoscaler
+## Annexe A - Cluster Autoscaler
 
 Le Cluster Autoscaler ajuste automatiquement le nombre de nodes EC2 dans le Node Group EKS selon les pods en attente de scheduling.
 
@@ -1218,7 +1218,7 @@ k8s.io/cluster-autoscaler/ecommerce-cluster = owned
 
 ---
 
-## Annexe B — HPA : vérification et test
+## Annexe B - HPA : vérification et test
 
 ```bash
 # État des HPA
@@ -1250,7 +1250,7 @@ kubectl get deployment metrics-server -n kube-system
 
 ---
 
-## Annexe C — Observabilité : VPC Flow Logs, CloudTrail, alarmes
+## Annexe C - Observabilité : VPC Flow Logs, CloudTrail, alarmes
 
 ### VPC Flow Logs
 
@@ -1373,7 +1373,7 @@ echo "✅ Alarmes et dashboard CloudWatch créés"
 
 ---
 
-## Annexe D — ECR Lifecycle Policy
+## Annexe D - ECR Lifecycle Policy
 
 Éviter l'accumulation d'images non utilisées (facturation au GB stocké).
 
@@ -1399,7 +1399,7 @@ done
 
 ---
 
-## Annexe E — AWS Load Balancer Controller (console Helm)
+## Annexe E - AWS Load Balancer Controller (console Helm)
 
 Requis pour que l'Ingress Kubernetes crée automatiquement l'ALB interne EKS.
 

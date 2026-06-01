@@ -1,4 +1,4 @@
-# Architecture — E-Commerce Microservices sur AWS
+# Architecture - E-Commerce Microservices sur AWS
 
 **Auteur :** Yara Mahi Mohamed | Portfolio DevOps & SRE  
 **Stack :** React 18 + NGINX · Node.js 20 · MariaDB → RDS Aurora MySQL · EKS + Helm  
@@ -11,14 +11,14 @@
 1. [Vue d'ensemble](#1-vue-densemble)
 2. [Schéma global](#2-schéma-global)
 3. [Couche DNS & CDN](#3-couche-dns--cdn)
-4. [Réseau — VPC & subnets](#4-réseau--vpc--subnets)
-5. [Sécurité — Security Groups](#5-sécurité--security-groups)
-6. [Frontend — trois modes de déploiement](#6-frontend--trois-modes-de-déploiement)
+4. [Réseau - VPC & subnets](#4-réseau--vpc--subnets)
+5. [Sécurité - Security Groups](#5-sécurité--security-groups)
+6. [Frontend - trois modes de déploiement](#6-frontend--trois-modes-de-déploiement)
 7. [Load Balancer public](#7-load-balancer-public)
-8. [EKS — cluster Kubernetes](#8-eks--cluster-kubernetes)
+8. [EKS - cluster Kubernetes](#8-eks--cluster-kubernetes)
 9. [Microservices](#9-microservices)
-10. [Base de données — RDS Aurora](#10-base-de-données--rds-aurora)
-11. [Registry — ECR](#11-registry--ecr)
+10. [Base de données - RDS Aurora](#10-base-de-données--rds-aurora)
+11. [Registry - ECR](#11-registry--ecr)
 12. [Secrets & IAM](#12-secrets--iam)
 13. [Observabilité](#13-observabilité)
 14. [Flux de données complet](#14-flux-de-données-complet)
@@ -44,18 +44,18 @@ ALB public (HTTPS :443)
     ├── Option A : EC2 + Auto Scaling Group
     ├── Option B : Elastic Beanstalk
     └── Option C : ECS Fargate
-              │ (les 3 servent le même frontend React + NGINX)
-              ▼
+                │ (les 3 servent le même frontend React + NGINX)
+                ▼
          ALB interne EKS (Ingress Controller)
-              │
-    ┌─────────┼─────────┬─────────┐
-    ▼         ▼         ▼         ▼
+                │
+    ┌───────────┼─────────────┬────────────┐
+    ▼           ▼             ▼            ▼
 auth:3001  product:3002  order:3003  review:3004
-    │         │           │           │
-    └─────────┴───────────┴───────────┘
-                    │ MySQL :3306
-              RDS Aurora MySQL
-              (ecommerce_db)
+    │           │             │            │
+    └───────────┴─────────────┴────────────┘
+                       │ MySQL :3306
+                 RDS Aurora MySQL
+                  (ecommerce_db)
 ```
 
 ### Ce qui vient de l'infra locale (OCI/on-premise)
@@ -66,7 +66,7 @@ auth:3001  product:3002  order:3003  review:3004
 | IP fixe `192.168.56.111` (K8s NodePort 30080) | ALB interne EKS | Créé automatiquement par AWS LB Controller |
 | IP fixe `192.168.56.114` (Frontend VM) | ALB public + ASG/Beanstalk/ECS | Remplacé par une couche managée |
 | GHCR (`ghcr.io/yaraportfolio/*`) | ECR (`ACCOUNT.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/*`) | Images migrées au premier déploiement |
-| MariaDB 10.11 | Aurora MySQL 8.0 | 100% compatible — drivers `mysql2` et schéma SQL inchangés |
+| MariaDB 10.11 | Aurora MySQL 8.0 | 100% compatible - drivers `mysql2` et schéma SQL inchangés |
 
 **Ce qui ne change pas :** le code des microservices, le Helm chart, l'image Docker frontend, la variable `BACKEND_URL` injectée par `envsubst`, et le schéma `ecommerce_db.sql`.
 
@@ -87,12 +87,12 @@ auth:3001  product:3002  order:3003  review:3004
                          └─────────────┬─────────────┘
                                        │ HTTPS :443
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│  VPC — 10.0.0.0/16 (eu-west-1)                                               │
+│  VPC - 10.0.0.0/16 (eu-west-1)                                               │
 │                                                                              │
 │  ┌───────────────────────────────────────────────────────────────────────┐   │
-│  │ Subnets publics — 10.0.1-3.0/24 (eu-west-1a/b/c)                      │   │
+│  │ Subnets publics - 10.0.1-3.0/24 (eu-west-1a/b/c)                      │   │
 │  │                                                                       │   │
-│  │           ALB public — ecommerce-alb-pub                              │   │
+│  │           ALB public - ecommerce-alb-pub                              │   │
 │  │           SG-ALB : :80 :443 ← 0.0.0.0/0                               │   │
 │  │                     │                                                 │   │
 │  │      ┌──────────────┼──────────────┐                                  │   │
@@ -107,12 +107,12 @@ auth:3001  product:3002  order:3003  review:3004
 │                                      │                                       │
 │                                      ▼ HTTP                                  │
 │  ┌───────────────────────────────────────────────────────────────────────┐   │
-│  │  Subnets privés — 10.0.10-12.0/24 (eu-west-1a/b)                      │   │
+│  │  Subnets privés - 10.0.10-12.0/24 (eu-west-1a/b)                      │   │
 │  │                                                                       │   │
-│  │        ALB interne — Ingress EKS (AWS LB Controller)                  │   │
+│  │        ALB interne - Ingress EKS (AWS LB Controller)                  │   │
 │  │                         │                                             │   │
 │  │  ┌──────────────────────────────────────────────────────────────────┐ │   │
-│  │  │  EKS — ecommerce-cluster (Kubernetes 1.29)                       │ │   │
+│  │  │  EKS - ecommerce-cluster (Kubernetes 1.29)                       │ │   │
 │  │  │  Node Group : t3.medium × 2-6 · HPA activé                       │ │   │
 │  │  │                                                                  │ │   │
 │  │  │  namespace: ecommerce                                            │ │   │
@@ -127,10 +127,10 @@ auth:3001  product:3002  order:3003  review:3004
 │  └───────────────────────────────────────────────────────────────────────┘   │
 │                                     │ MySQL :3306                            │
 │  ┌───────────────────────────────────────────────────────────────────────┐   │
-│  │  Subnets DB — 10.0.20-21.0/24 (eu-west-1a/b)                          │   │
+│  │  Subnets DB - 10.0.20-21.0/24 (eu-west-1a/b)                          │   │
 │  │                                                                       │   │
 │  │    ┌────────────────────────────────────────┐                         │   │
-│  │    │  RDS Aurora MySQL — ecommerce-cluster  │                         │   │
+│  │    │  RDS Aurora MySQL - ecommerce-cluster  │                         │   │
 │  │    │  Writer endpoint : cluster-xxx.rds.aws │                         │   │
 │  │    │  Reader endpoint : ro-cluster-xxx      │                         │   │
 │  │    │  db.t3.medium · Multi-AZ · chiffré     │                         │   │
@@ -154,8 +154,8 @@ Route 53 est le service DNS d'AWS. Il remplace les entrées `/etc/hosts` et les 
 
 **Rôle dans cette architecture :**
 - Résolution du domaine principal (`ecommerce.votredomaine.com`) vers la distribution CloudFront
-- Health checks automatiques sur l'ALB — en cas de panne d'une région, Route 53 peut rediriger vers un failover
-- Alias record (A record vers CloudFront) — pas de TTL court à gérer, la résolution est immédiate côté AWS
+- Health checks automatiques sur l'ALB - en cas de panne d'une région, Route 53 peut rediriger vers un failover
+- Alias record (A record vers CloudFront) - pas de TTL court à gérer, la résolution est immédiate côté AWS
 
 **Pourquoi un alias record et pas un CNAME :** Les CNAMEs ne peuvent pas pointer vers la racine d'un domaine (`votredomaine.com` sans sous-domaine). Les alias records AWS permettent de le faire et sont gratuits (pas de frais de requête DNS pour les alias vers services AWS).
 
@@ -164,20 +164,20 @@ Route 53 est le service DNS d'AWS. Il remplace les entrées `/etc/hosts` et les 
 CloudFront est le CDN (Content Delivery Network) d'AWS. Il positionne des copies du contenu statique dans des edge locations à travers le monde (plus de 400 points de présence).
 
 **Rôle dans cette architecture :**
-- Mise en cache des assets statiques du frontend React (JS, CSS, images) — réduit la charge sur l'ALB
-- Terminaison SSL/TLS au niveau de l'edge — le certificat ACM est attaché ici
-- WAF (Web Application Firewall) — peut filtrer les attaques SQL injection, XSS, rate limiting
+- Mise en cache des assets statiques du frontend React (JS, CSS, images) - réduit la charge sur l'ALB
+- Terminaison SSL/TLS au niveau de l'edge - le certificat ACM est attaché ici
+- WAF (Web Application Firewall) - peut filtrer les attaques SQL injection, XSS, rate limiting
 - Deux behaviors configurés : `/api/*` sans cache (forward vers ALB), `/*` avec cache agressif
 
-**Comportement de l'envsubst NGINX :** Le frontend React est une SPA statique — le fichier `dist/` est servi par NGINX. La variable `BACKEND_URL` est injectée au démarrage du conteneur par `envsubst` dans la config NGINX, ce qui signifie que les requêtes `/api/...` sont proxifiées par NGINX vers l'ALB interne EKS. CloudFront ne voit que du HTTP/HTTPS vers l'ALB public — il ne touche pas au proxy interne.
+**Comportement de l'envsubst NGINX :** Le frontend React est une SPA statique - le fichier `dist/` est servi par NGINX. La variable `BACKEND_URL` est injectée au démarrage du conteneur par `envsubst` dans la config NGINX, ce qui signifie que les requêtes `/api/...` sont proxifiées par NGINX vers l'ALB interne EKS. CloudFront ne voit que du HTTP/HTTPS vers l'ALB public - il ne touche pas au proxy interne.
 
-### ACM — AWS Certificate Manager
+### ACM - AWS Certificate Manager
 
-Gère le cycle de vie des certificats SSL/TLS (création, renouvellement automatique, révocation). Les certificats sont attachés aux listeners HTTPS de l'ALB et de CloudFront. Renouvellement automatique avant expiration — zéro gestion manuelle.
+Gère le cycle de vie des certificats SSL/TLS (création, renouvellement automatique, révocation). Les certificats sont attachés aux listeners HTTPS de l'ALB et de CloudFront. Renouvellement automatique avant expiration - zéro gestion manuelle.
 
 ---
 
-## 4. Réseau — VPC & subnets
+## 4. Réseau - VPC & subnets
 
 ### VPC principal
 
@@ -193,7 +193,7 @@ Gère le cycle de vie des certificats SSL/TLS (création, renouvellement automat
 
 L'architecture sépare les ressources en trois niveaux d'isolation réseau :
 
-**Subnets publics** — exposés à internet via l'Internet Gateway. Les ressources ici ont une IP publique et peuvent recevoir du trafic entrant.
+**Subnets publics** - exposés à internet via l'Internet Gateway. Les ressources ici ont une IP publique et peuvent recevoir du trafic entrant.
 
 | Nom | CIDR | AZ | Ressources |
 |-----|------|----|-----------|
@@ -201,7 +201,7 @@ L'architecture sépare les ressources en trois niveaux d'isolation réseau :
 | ecommerce-pub-b | 10.0.2.0/24 | eu-west-1b | ALB public, NAT Gateway, EC2 frontend, ECS tasks |
 | ecommerce-pub-c | 10.0.3.0/24 | eu-west-1c | ALB public, EC2 frontend |
 
-**Subnets privés** — pas d'accès internet entrant. Les ressources sortent vers internet via la NAT Gateway (pour puller des images ECR, appeler des APIs AWS, etc.).
+**Subnets privés** - pas d'accès internet entrant. Les ressources sortent vers internet via la NAT Gateway (pour puller des images ECR, appeler des APIs AWS, etc.).
 
 | Nom | CIDR | AZ | Ressources |
 |-----|------|----|-----------|
@@ -211,7 +211,7 @@ L'architecture sépare les ressources en trois niveaux d'isolation réseau :
 Tags Kubernetes obligatoires sur ces subnets :
 - `kubernetes.io/role/internal-elb = 1` → EKS crée les ALB internes ici
 
-**Subnets base de données** — isolés, sans route vers internet, sans NAT. Seule la communication via le Security Group depuis les nodes EKS est autorisée.
+**Subnets base de données** - isolés, sans route vers internet, sans NAT. Seule la communication via le Security Group depuis les nodes EKS est autorisée.
 
 | Nom | CIDR | AZ | Ressources |
 |-----|------|----|-----------|
@@ -222,21 +222,21 @@ Tags Kubernetes obligatoires sur ces subnets :
 
 Chaque niveau a sa propre table de routage :
 
-**Table publique** — une seule pour les trois subnets publics :
+**Table publique** - une seule pour les trois subnets publics :
 ```
 Destination     Target
 0.0.0.0/0       igw-xxx (Internet Gateway)
 10.0.0.0/16     local
 ```
 
-**Tables privées** — une par AZ, chacune avec sa propre NAT Gateway (résilience : si eu-west-1a tombe, le trafic de eu-west-1b continue via son propre NAT) :
+**Tables privées** - une par AZ, chacune avec sa propre NAT Gateway (résilience : si eu-west-1a tombe, le trafic de eu-west-1b continue via son propre NAT) :
 ```
 Destination     Target
 0.0.0.0/0       nat-xxx-a (NAT Gateway dans pub-a)
 10.0.0.0/16     local
 ```
 
-**Tables DB** — associées aux tables privées, pas de route internet. Les subnets DB utilisent les mêmes tables de routage que les subnets privés de la même AZ.
+**Tables DB** - associées aux tables privées, pas de route internet. Les subnets DB utilisent les mêmes tables de routage que les subnets privés de la même AZ.
 
 ### NAT Gateway
 
@@ -246,9 +246,9 @@ Deux NAT Gateways (une par AZ utilisée) permettent aux nodes EKS de sortir vers
 
 ---
 
-## 5. Sécurité — Security Groups
+## 5. Sécurité - Security Groups
 
-Les Security Groups sont des pare-feux stateful attachés à chaque ressource (ENI — Elastic Network Interface). La règle fondamentale de cette architecture : **chaque SG référence le SG de la couche précédente comme source, pas un CIDR IP**.
+Les Security Groups sont des pare-feux stateful attachés à chaque ressource (ENI - Elastic Network Interface). La règle fondamentale de cette architecture : **chaque SG référence le SG de la couche précédente comme source, pas un CIDR IP**.
 
 ### Pourquoi référencer des SGs plutôt que des CIDRs
 
@@ -275,7 +275,7 @@ SG-RDS (ecommerce-sg-rds)
 
 ### Détail de chaque Security Group
 
-**SG-ALB** — point d'entrée internet
+**SG-ALB** - point d'entrée internet
 
 | Direction | Protocol | Port | Source/Dest |
 |-----------|----------|------|------------|
@@ -283,7 +283,7 @@ SG-RDS (ecommerce-sg-rds)
 | Inbound | TCP | 443 | 0.0.0.0/0 |
 | Outbound | All | All | 0.0.0.0/0 |
 
-**SG-Frontend** — instances frontend (EC2, Beanstalk, ECS)
+**SG-Frontend** - instances frontend (EC2, Beanstalk, ECS)
 
 | Direction | Protocol | Port | Source/Dest |
 |-----------|----------|------|------------|
@@ -292,7 +292,7 @@ SG-RDS (ecommerce-sg-rds)
 
 Note : aucun port SSH (22) exposé. L'accès aux instances se fait via AWS Systems Manager Session Manager.
 
-**SG-EKS** — nodes Kubernetes et pods
+**SG-EKS** - nodes Kubernetes et pods
 
 | Direction | Protocol | Port | Source/Dest |
 |-----------|----------|------|------------|
@@ -305,7 +305,7 @@ Note : aucun port SSH (22) exposé. L'accès aux instances se fait via AWS Syste
 
 La règle self est critique pour EKS : elle permet la communication pod-to-pod, node-to-node, et les health checks Kubernetes.
 
-**SG-RDS** — base de données Aurora
+**SG-RDS** - base de données Aurora
 
 | Direction | Protocol | Port | Source/Dest |
 |-----------|----------|------|------------|
@@ -314,17 +314,13 @@ La règle self est critique pour EKS : elle permet la communication pod-to-pod, 
 
 La base de données n'est joignable que depuis les nodes EKS. Ni le frontend, ni internet, ni un bastion n'y accèdent directement en production.
 
-### Comparaison avec OCI Security Lists
-
-Sur OCI, les Security Lists sont **stateless** — il faut créer des règles symétriques (inbound et outbound) pour chaque flux. Sur AWS, les Security Groups sont **stateful** — une règle inbound autorise automatiquement la réponse. Vous n'avez à écrire que les règles dans un sens.
-
 ---
 
-## 6. Frontend — trois modes de déploiement
+## 6. Frontend - trois modes de déploiement
 
-Le frontend est identique dans les trois cas : une image Docker `nginx:stable-alpine` avec le build React `dist/` et la configuration NGINX qui proxifie `/api/*` vers l'ALB interne EKS. La variable `BACKEND_URL` est injectée dynamiquement par `envsubst` au démarrage du conteneur — aucun rebuild nécessaire pour changer de backend.
+Le frontend est identique dans les trois cas : une image Docker `nginx:stable-alpine` avec le build React `dist/` et la configuration NGINX qui proxifie `/api/*` vers l'ALB interne EKS. La variable `BACKEND_URL` est injectée dynamiquement par `envsubst` au démarrage du conteneur - aucun rebuild nécessaire pour changer de backend.
 
-### Option A — EC2 + Auto Scaling Group
+### Option A - EC2 + Auto Scaling Group
 
 **Principe :** Des VMs EC2 classiques. Au démarrage de chaque VM, le User Data script installe Docker, se connecte à ECR, et lance le conteneur frontend.
 
@@ -339,7 +335,7 @@ Le frontend est identique dans les trois cas : une image Docker `nginx:stable-al
 
 **Cas d'usage :** production avec charge prévisible, équipes qui veulent comprendre la couche infra avant d'abstraire
 
-### Option B — Elastic Beanstalk
+### Option B - Elastic Beanstalk
 
 **Principe :** PaaS géré par AWS. On fournit un fichier `Dockerrun.aws.json` décrivant l'image et les variables d'environnement. Beanstalk provisionne automatiquement EC2, ALB, ASG, et les health checks.
 
@@ -364,7 +360,7 @@ Le frontend est identique dans les trois cas : une image Docker `nginx:stable-al
 }
 ```
 
-**Stratégie de déploiement :** Rolling (50% des instances à la fois) — évite les downtime lors des mises à jour.
+**Stratégie de déploiement :** Rolling (50% des instances à la fois) - évite les downtime lors des mises à jour.
 
 **Avantages :** déploiement en une commande, pas de gestion d'ASG ou d'ALB, health checks automatiques, logs CloudWatch intégrés
 
@@ -372,13 +368,13 @@ Le frontend est identique dans les trois cas : une image Docker `nginx:stable-al
 
 **Cas d'usage :** équipes produit sans DevOps dédié, prototypage rapide, migration depuis une app monolithique
 
-### Option C — ECS Fargate
+### Option C - ECS Fargate
 
 **Principe :** Conteneurs managés sans serveur à gérer. AWS alloue du CPU et de la mémoire à la demande pour chaque task, sans node EC2 visible.
 
 **Composants :**
 - **Cluster ECS** : regroupement logique des services. Configuré avec FARGATE (On-Demand) et FARGATE_SPOT (interruptible, 70% moins cher) en mode mixed (1:4)
-- **Task Definition** : blueprint du conteneur — image, CPU/mémoire, ports, variables d'env, configuration des logs. Chaque révision est immutable
+- **Task Definition** : blueprint du conteneur - image, CPU/mémoire, ports, variables d'env, configuration des logs. Chaque révision est immutable
 - **Service ECS** : maintient N tasks en cours d'exécution, intègre avec l'ALB via le Target Group, gère les rolling deployments
 
 **Avantages :** scale to zero possible, facturation à la seconde, zéro gestion des nodes, FARGATE_SPOT pour réduire les coûts de 70%
@@ -404,7 +400,7 @@ Le frontend est identique dans les trois cas : une image Docker `nginx:stable-al
 
 ## 7. Load Balancer public
 
-### ALB — Application Load Balancer
+### ALB - Application Load Balancer
 
 L'ALB opère au niveau L7 (HTTP/HTTPS). Il termine le SSL, inspecte les headers HTTP, et route vers le Target Group approprié.
 
@@ -427,11 +423,11 @@ L'ALB opère au niveau L7 (HTTP/HTTPS). Il termine le SSL, inspecte les headers 
 
 ### Sticky sessions
 
-Non activées par défaut. Le frontend React est une SPA stateless — chaque requête peut aller sur n'importe quelle instance. Les JWT sont validés par les microservices, pas stockés côté serveur.
+Non activées par défaut. Le frontend React est une SPA stateless - chaque requête peut aller sur n'importe quelle instance. Les JWT sont validés par les microservices, pas stockés côté serveur.
 
 ---
 
-## 8. EKS — cluster Kubernetes
+## 8. EKS - cluster Kubernetes
 
 ### Cluster
 
@@ -454,7 +450,7 @@ Non activées par défaut. Le frontend React est une SPA stateless — chaque re
 | AMI | Amazon Linux 2 (AL2_x86_64) |
 | Min / Max / Desired | 2 / 6 / 3 |
 | Subnets | Privés uniquement |
-| Cluster Autoscaler | Activé — scale automatique selon les pods pending |
+| Cluster Autoscaler | Activé - scale automatique selon les pods pending |
 
 **Pourquoi t3.medium :** chaque microservice demande 100m CPU et 128Mi RAM au minimum. Sur un t3.medium, on peut faire tourner ~8-10 pods confortablement. Avec 3 nodes, la capacité totale est d'environ 24-30 pods, ce qui permet de faire tourner les 8 pods de base (2 réplicas × 4 services) avec de la marge pour le HPA.
 
@@ -492,7 +488,7 @@ spec:
 
 Le controller crée automatiquement un ALB interne dans les subnets privés, configure les Target Groups pour chaque service, et les health checks correspondent aux probes Kubernetes.
 
-### HPA — Horizontal Pod Autoscaler
+### HPA - Horizontal Pod Autoscaler
 
 Chaque microservice a un HPA configuré dans le Helm chart :
 
@@ -524,7 +520,7 @@ jwt:
   # secret : injecté via set_sensitive Terraform / kubectl secret
 ```
 
-Les secrets DB et JWT sont passés en `--set-sensitive` dans Terraform ou créés manuellement avec `kubectl create secret` — ils ne transitent jamais dans les fichiers values versionnés.
+Les secrets DB et JWT sont passés en `--set-sensitive` dans Terraform ou créés manuellement avec `kubectl create secret` - ils ne transitent jamais dans les fichiers values versionnés.
 
 ---
 
@@ -532,19 +528,19 @@ Les secrets DB et JWT sont passés en `--set-sensitive` dans Terraform ou créé
 
 Les quatre microservices sont des applications Node.js 20 / Express identiques en structure. Ils partagent la même base de données `ecommerce_db` sur RDS Aurora et le même `JWT_SECRET`.
 
-### auth-service — Port 3001
+### auth-service - Port 3001
 
-**Rôle :** authentification JWT. Point central de toute l'architecture — les autres services valident les tokens émis ici.
+**Rôle :** authentification JWT. Point central de toute l'architecture - les autres services valident les tokens émis ici.
 
 **Endpoints :**
 | Méthode | Route | Auth | Description |
 |---------|-------|------|-------------|
-| POST | /api/auth/register | — | Inscription utilisateur |
-| POST | /api/auth/login | — | Connexion → JWT 24h |
+| POST | /api/auth/register | - | Inscription utilisateur |
+| POST | /api/auth/login | - | Connexion → JWT 24h |
 | GET | /api/auth/me | JWT | Profil utilisateur courant |
-| GET | /api/auth/health | — | Liveness probe Kubernetes |
-| GET | /api/auth/ready | — | Readiness probe Kubernetes |
-| GET | /api/auth/metrics | — | Métriques Prometheus |
+| GET | /api/auth/health | - | Liveness probe Kubernetes |
+| GET | /api/auth/ready | - | Readiness probe Kubernetes |
+| GET | /api/auth/metrics | - | Métriques Prometheus |
 
 **Tables utilisées :** `users` (email, password_hash bcrypt, role, created_at)
 
@@ -560,28 +556,28 @@ JWT_SECRET=<depuis Secrets Manager>
 JWT_EXPIRATION=24h
 ```
 
-### product-service — Port 3002
+### product-service - Port 3002
 
 **Rôle :** catalogue produits. Seul service public (lecture sans auth). Les opérations d'écriture (CRUD) requièrent un JWT admin.
 
 **Endpoints :**
 | Méthode | Route | Auth | Description |
 |---------|-------|------|-------------|
-| GET | /api/products | — | Liste complète |
-| GET | /api/products/:id | — | Détail produit |
-| GET | /api/products/search?q= | — | Recherche fulltext (index FULLTEXT MySQL) |
-| GET | /api/products/category/:cat | — | Filtrage par catégorie |
+| GET | /api/products | - | Liste complète |
+| GET | /api/products/:id | - | Détail produit |
+| GET | /api/products/search?q= | - | Recherche fulltext (index FULLTEXT MySQL) |
+| GET | /api/products/category/:cat | - | Filtrage par catégorie |
 | POST | /api/products | Admin | Créer un produit |
 | PUT | /api/products/:id | Admin | Modifier |
 | DELETE | /api/products/:id | Admin | Supprimer |
-| GET | /api/products/health | — | Liveness probe |
-| GET | /api/products/metrics | — | Métriques Prometheus |
+| GET | /api/products/health | - | Liveness probe |
+| GET | /api/products/metrics | - | Métriques Prometheus |
 
 **Tables utilisées :** `products` (name, description, price, stock, category, image_url)
 
-**Note sur le fulltext search :** La table `products` a un index `FULLTEXT` sur `(name, description)` — la route `/search?q=laptop` utilise `MATCH(name, description) AGAINST(? IN BOOLEAN MODE)`. Compatible Aurora MySQL 8.0.
+**Note sur le fulltext search :** La table `products` a un index `FULLTEXT` sur `(name, description)` - la route `/search?q=laptop` utilise `MATCH(name, description) AGAINST(? IN BOOLEAN MODE)`. Compatible Aurora MySQL 8.0.
 
-### order-service — Port 3003
+### order-service - Port 3003
 
 **Rôle :** gestion complète du cycle de vie des commandes. Tous les endpoints requièrent un JWT valide. Les utilisateurs ne voient que leurs propres commandes, les admins voient tout.
 
@@ -593,8 +589,8 @@ JWT_EXPIRATION=24h
 | GET | /api/orders/:id | JWT/Admin | Détail commande |
 | PUT | /api/orders/:id/status | Admin | Changer le statut |
 | GET | /api/orders/all | Admin | Toutes les commandes |
-| GET | /api/orders/health | — | Liveness probe |
-| GET | /api/orders/metrics | — | Métriques Prometheus |
+| GET | /api/orders/health | - | Liveness probe |
+| GET | /api/orders/metrics | - | Métriques Prometheus |
 
 **Cycle de vie d'une commande :** `pending` → `processing` → `shipped` → `delivered` / `cancelled`
 
@@ -602,20 +598,20 @@ JWT_EXPIRATION=24h
 
 Note sur `unit_price` : le prix est stocké au moment de la commande, pas une référence vers le prix actuel du produit. Cela garantit que le montant affiché dans l'historique ne change pas si le prix du produit évolue.
 
-### review-service — Port 3004
+### review-service - Port 3004
 
 **Rôle :** avis et notations produits. Lecture publique, écriture authentifiée. Contrainte métier forte : 1 avis maximum par utilisateur par produit.
 
 **Endpoints :**
 | Méthode | Route | Auth | Description |
 |---------|-------|------|-------------|
-| GET | /api/reviews/product/:id | — | Avis d'un produit |
+| GET | /api/reviews/product/:id | - | Avis d'un produit |
 | POST | /api/reviews | JWT | Créer un avis (1 max) |
 | PUT | /api/reviews/:id | JWT/Admin | Modifier un avis |
 | DELETE | /api/reviews/:id | JWT/Admin | Supprimer un avis |
 | GET | /api/reviews | Admin | Tous les avis (modération) |
-| GET | /api/reviews/health | — | Liveness probe |
-| GET | /api/reviews/metrics | — | Métriques Prometheus |
+| GET | /api/reviews/health | - | Liveness probe |
+| GET | /api/reviews/metrics | - | Métriques Prometheus |
 
 **Contrainte d'unicité :** Un `UNIQUE INDEX` sur `(user_id, product_id)` dans la table `reviews` garantit qu'un même utilisateur ne peut pas soumettre deux avis pour le même produit. Toute tentative retourne une erreur `409 Conflict`.
 
@@ -641,7 +637,7 @@ Sur EKS, si le Prometheus Operator est déployé, les `ServiceMonitor` du Helm c
 
 ---
 
-## 10. Base de données — RDS Aurora
+## 10. Base de données - RDS Aurora
 
 ### Choix Aurora vs RDS MySQL classique
 
@@ -762,7 +758,7 @@ const pool = mysql.createPool({
 
 ---
 
-## 11. Registry — ECR
+## 11. Registry - ECR
 
 ECR (Elastic Container Registry) héberge les images Docker dans AWS. Les images initialement sur GHCR sont migrées ici pour bénéficier du réseau AWS privé (pas de frais d'egress entre ECR et EKS dans la même région).
 
@@ -782,7 +778,7 @@ Pour éviter l'accumulation d'images, une lifecycle policy conserve les 10 derni
 
 ### Accès des nodes EKS
 
-Les nodes EKS ont le rôle IAM `ecommerce-eks-node-role` avec la policy `AmazonEC2ContainerRegistryReadOnly`. Ils peuvent puller les images sans credentials explicites — l'authentification se fait via le rôle IAM attaché à l'instance.
+Les nodes EKS ont le rôle IAM `ecommerce-eks-node-role` avec la policy `AmazonEC2ContainerRegistryReadOnly`. Ils peuvent puller les images sans credentials explicites - l'authentification se fait via le rôle IAM attaché à l'instance.
 
 ### Scan de sécurité
 
@@ -818,21 +814,21 @@ Les secrets sont consommés de deux façons selon la couche :
 
 ### Rôles IAM
 
-**`ecommerce-eks-cluster-role`** — rôle du control plane EKS  
+**`ecommerce-eks-cluster-role`** - rôle du control plane EKS  
 Policy : `AmazonEKSClusterPolicy`
 
-**`ecommerce-eks-node-role`** — rôle des nodes EC2 dans le node group  
+**`ecommerce-eks-node-role`** - rôle des nodes EC2 dans le node group  
 Policies : `AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOnly`
 
-**`ecommerce-frontend-ec2-role`** — rôle des instances frontend EC2  
+**`ecommerce-frontend-ec2-role`** - rôle des instances frontend EC2  
 Policies : `AmazonEC2ContainerRegistryReadOnly`, `AmazonSSMManagedInstanceCore`
 
-**`AmazonEKSLoadBalancerControllerRole`** — rôle du AWS Load Balancer Controller  
+**`AmazonEKSLoadBalancerControllerRole`** - rôle du AWS Load Balancer Controller  
 Policy custom : `AWSLoadBalancerControllerIAMPolicy` (permet de créer/modifier/supprimer des ALB et Target Groups)
 
 ### Principe du moindre privilège
 
-Chaque rôle n'a que les permissions strictement nécessaires. Les nodes EKS n'ont pas accès à S3, RDS, ou Secrets Manager directement — ils accèdent à la DB via les variables d'environnement injectées par les secrets Kubernetes. Cela limite l'impact d'une compromission d'un node.
+Chaque rôle n'a que les permissions strictement nécessaires. Les nodes EKS n'ont pas accès à S3, RDS, ou Secrets Manager directement - ils accèdent à la DB via les variables d'environnement injectées par les secrets Kubernetes. Cela limite l'impact d'une compromission d'un node.
 
 ---
 
@@ -951,20 +947,20 @@ Les VPC Flow Logs capturent les métadonnées de chaque connexion réseau dans l
 | Concept OCI | Équivalent AWS | Différences notables |
 |-------------|---------------|---------------------|
 | VCN (Virtual Cloud Network) | VPC | OCI VCN est régional, subnets peuvent être régionaux ou AD-specific. AWS VPC régional, subnets zonaux (AZ) |
-| Security List | Security Group | Security Lists OCI stateless (règles IN+OUT symétriques). Security Groups AWS stateful (réponse automatique) |
+| Security List | Security Group | Security Lists OCI stateless/stateful. Security Groups AWS stateful (réponse automatique) |
 | NSG (Network Security Group) | Security Group | Très similaires, AWS SGs s'attachent à l'ENI |
-| Compartment | — | Pas d'équivalent direct. AWS utilise les comptes, Organizations et tags pour l'isolation |
+| Compartment | - | Pas d'équivalent direct. AWS utilise les comptes, Organizations et tags pour l'isolation |
 | Internet Gateway | Internet Gateway | Identique dans le principe |
 | NAT Gateway | NAT Gateway | Identique. OCI : pas de frais d'egress sur les 10 premiers TB/mois. AWS : $0.045/GB |
 | OKE (Oracle Kubernetes Engine) | EKS | OKE nodes peuvent être dans des subnets publics ou privés. EKS recommande privés uniquement |
 | Load Balancer OCI (stateful) | ALB | ALB opère en L7 uniquement. OCI LB supporte L4+L7 dans la même ressource |
 | OCR (Oracle Container Registry) | ECR | ECR a le scan de vulnérabilités intégré (payant au-delà du Free Tier) |
 | Autonomous Database / DBCS | RDS Aurora | Aurora MySQL compatible MariaDB. Schéma et drivers inchangés |
-| Resource Manager (Terraform natif) | — / Terraform | AWS n'a pas de Terraform natif. CloudFormation est l'IaC natif AWS, Terraform reste populaire |
+| Resource Manager (Terraform natif) | - / Terraform | AWS n'a pas de Terraform natif. CloudFormation est l'IaC natif AWS, Terraform reste populaire |
 | OCI Vault | Secrets Manager | Secrets Manager peut faire la rotation automatique des credentials RDS |
 | OCI Monitoring | CloudWatch | CloudWatch combine métriques, logs, traces (vs services séparés sur OCI) |
 | OCI Functions | Lambda | Lambda est plus mature, intégration plus profonde avec l'écosystème AWS |
-| Flex Shapes (OCPU libres) | — | Pas d'équivalent AWS. EC2 a des familles fixes (t3, m6i, c6i...). GCP a les custom machine types |
+| Flex Shapes (OCPU libres) | - | Pas d'équivalent AWS. EC2 a des familles fixes (t3, m6i, c6i...). GCP a les custom machine types |
 
 ---
 
@@ -989,17 +985,17 @@ La séparation des bases (pattern Database per Service) serait l'évolution natu
 
 ### Pourquoi trois options de frontend ?
 
-L'objectif pédagogique du projet est de comprendre la progression naturelle des architectures AWS : VM classique (EC2) → PaaS (Beanstalk) → Serverless containers (ECS Fargate). Les trois déploient exactement la même image Docker — seul le mécanisme d'orchestration change. C'est le meilleur moyen de comprendre les trade-offs de chaque approche.
+L'objectif pédagogique du projet est de comprendre la progression naturelle des architectures AWS : VM classique (EC2) → PaaS (Beanstalk) → Serverless containers (ECS Fargate). Les trois déploient exactement la même image Docker - seul le mécanisme d'orchestration change. C'est le meilleur moyen de comprendre les trade-offs de chaque approche.
 
 ### Pourquoi EKS pour les microservices et pas ECS ?
 
-EKS a été choisi parce que le projet utilise déjà un Helm chart Kubernetes (`ecommerce-k8s-helm`) avec des Deployments, Services, HPAs, et Ingress configurés. Migrer ce chart sur EKS est direct — même Helm, même YAML. Réécrire en Task Definitions ECS aurait demandé un effort significatif sans bénéfice pédagogique.
+EKS a été choisi parce que le projet utilise déjà un Helm chart Kubernetes (`ecommerce-k8s-helm`) avec des Deployments, Services, HPAs, et Ingress configurés. Migrer ce chart sur EKS est direct - même Helm, même YAML. Réécrire en Task Definitions ECS aurait demandé un effort significatif sans bénéfice pédagogique.
 
 ### JWT secret partagé vs introspection
 
 Les quatre microservices partagent le même `JWT_SECRET`. Chacun valide lui-même les tokens reçus sans appeler auth-service. C'est l'approche "shared secret" :
 
-**Avantage :** aucune dépendance réseau pour la validation — si auth-service est down, les utilisateurs déjà connectés continuent à fonctionner.
+**Avantage :** aucune dépendance réseau pour la validation - si auth-service est down, les utilisateurs déjà connectés continuent à fonctionner.
 
 **Inconvénient :** impossible de révoquer un token avant son expiration (24h). En cas de vol de token, l'attaquant a 24h.
 

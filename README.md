@@ -1,4 +1,4 @@
-# AWS E-Commerce — Infrastructure as Code
+# AWS E-Commerce - Infrastructure as Code
 **Auteur :** Yara Mahi Mohamed | Portfolio DevOps & SRE  
 **Stack :** React 18 + NGINX | Node.js 20 microservices | RDS Aurora MySQL | EKS + Helm
 
@@ -8,8 +8,8 @@
 
 Ce projet déploie l'architecture e-commerce complète sur AWS en deux phases :
 
-1. **Phase 1 — Déploiement manuel** : comprendre chaque service AWS avant d'automatiser
-2. **Phase 2 — Terraform** : infrastructure as code modulaire et reproductible
+1. **Phase 1 - Déploiement manuel** : comprendre chaque service AWS avant d'automatiser
+2. **Phase 2 - Terraform** : infrastructure as code modulaire et reproductible
 
 ### Architecture déployée
 
@@ -17,7 +17,7 @@ Ce projet déploie l'architecture e-commerce complète sur AWS en deux phases :
 Internet → Route 53 → CloudFront → ALB public (HTTPS)
                                         │
                     ┌───────────────────┼──────────────────┐
-                    │                  │                   │
+                    │                   │                  │
                EC2 + ASG       Elastic Beanstalk    ECS Fargate
                (Option A)        (Option B)          (Option C)
                     └───────────────────┼──────────────────┘
@@ -25,7 +25,7 @@ Internet → Route 53 → CloudFront → ALB public (HTTPS)
                               ALB interne EKS
                                         │
                     ┌───────────────────┼──────────────────┐
-                    │                  │                   │
+                    │                   │                  │
               auth-service      product-service      order-service
                :3001             :3002                :3003
                     │                                      │
@@ -45,11 +45,11 @@ Internet → Route 53 → CloudFront → ALB public (HTTPS)
 aws-ecommerce/
 ├── README.md                          # Ce fichier
 ├── docs/
-│   └── GUIDE-DEPLOIEMENT-MANUEL.md   # Phase 1 — déploiement pas à pas
+│   └── GUIDE-DEPLOIEMENT-MANUEL.md   # Phase 1 - déploiement pas à pas
 └── terraform/
     ├── environments/
     │   └── prod/
-    │       ├── main.tf               # Point d'entrée — assemble tous les modules
+    │       ├── main.tf               # Point d'entrée - assemble tous les modules
     │       ├── variables.tf          # Déclaration des variables
     │       ├── terraform.tfvars      # Valeurs (sans secrets)
     │       └── outputs.tf            # Sorties (ALB DNS, ECR URLs, etc.)
@@ -67,7 +67,7 @@ aws-ecommerce/
 
 ---
 
-## Phase 1 — Déploiement Manuel
+## Phase 1 - Déploiement Manuel
 
 Voir le guide complet : [`docs/GUIDE-DEPLOIEMENT-MANUEL.md`](./docs/GUIDE-DEPLOIEMENT-MANUEL.md)
 
@@ -75,17 +75,17 @@ Le guide couvre dans l'ordre :
 1. Configuration AWS CLI et outils
 2. VPC, subnets, NAT Gateway, route tables
 3. Security Groups (ALB → Frontend → EKS → RDS)
-4. RDS Aurora (compatible MariaDB 10.11 — schéma identique)
-5. ECR — migration des images de GHCR vers AWS
-6. EKS — cluster + AWS Load Balancer Controller
-7. Helm — déploiement des 4 microservices
+4. RDS Aurora (compatible MariaDB 10.11 - schéma identique)
+5. ECR - migration des images de GHCR vers AWS
+6. EKS - cluster + AWS Load Balancer Controller
+7. Helm - déploiement des 4 microservices
 8. Frontend en 3 variantes : EC2 ASG / Beanstalk / ECS Fargate
 9. ALB public + CloudFront + Route 53
 10. Vérification end-to-end
 
 ---
 
-## Phase 2 — Terraform
+## Phase 2 - Terraform
 
 ### Prérequis
 
@@ -194,9 +194,9 @@ terraform destroy
 | `microservices_image_tag` | Tag image microservices | v3.3 |
 | `eks_node_instance_type` | Type d'instance EKS | t3.medium |
 | `rds_instance_class` | Classe instance RDS | db.t3.medium |
-| `db_password` | Mot de passe DB (sensible) | — |
-| `jwt_secret` | Secret JWT (sensible) | — |
-| `certificate_arn` | ARN certificat ACM HTTPS | — |
+| `db_password` | Mot de passe DB (sensible) | - |
+| `jwt_secret` | Secret JWT (sensible) | - |
+| `certificate_arn` | ARN certificat ACM HTTPS | - |
 
 ---
 

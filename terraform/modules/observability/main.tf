@@ -154,7 +154,7 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric"
         properties = {
-          title  = "ALB — Requêtes/min"
+          title  = "ALB - Requêtes/min"
           period = 60
           stat   = "Sum"
           metrics = [["AWS/ApplicationELB", "RequestCount",
@@ -166,7 +166,7 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric"
         properties = {
-          title  = "ALB — Erreurs 5xx"
+          title  = "ALB - Erreurs 5xx"
           period = 60
           stat   = "Sum"
           metrics = [["AWS/ApplicationELB", "HTTPCode_Target_5XX_Count",
@@ -178,7 +178,7 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric"
         properties = {
-          title  = "RDS Aurora — CPU %"
+          title  = "RDS Aurora - CPU %"
           period = 60
           stat   = "Average"
           metrics = [["AWS/RDS", "CPUUtilization",
@@ -190,7 +190,7 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric"
         properties = {
-          title  = "RDS Aurora — Connexions"
+          title  = "RDS Aurora - Connexions"
           period = 60
           stat   = "Maximum"
           metrics = [["AWS/RDS", "DatabaseConnections",
@@ -203,7 +203,7 @@ resource "aws_cloudwatch_dashboard" "main" {
   })
 }
 
-# ---- SNS Topic (optionnel — pour recevoir les alertes par email) ----
+# ---- SNS Topic (optionnel - pour recevoir les alertes par email) ----
 resource "aws_sns_topic" "alerts" {
   count = var.alert_email != "" ? 1 : 0
   name  = "${var.project}-alerts"

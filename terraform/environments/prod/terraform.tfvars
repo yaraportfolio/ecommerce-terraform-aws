@@ -12,7 +12,7 @@ eks_node_desired        = 3
 frontend_mode           = "ec2"
 microservices_image_tag = "v3.3"
 
-# ⚠️ Ne pas committer ces valeurs — utiliser TF_VAR_db_password et TF_VAR_jwt_secret
+# ⚠️ Ne pas committer ces valeurs - utiliser TF_VAR_db_password et TF_VAR_jwt_secret
 # db_password    = ""
 # jwt_secret     = ""
 # certificate_arn = "arn:aws:acm:eu-west-1:ACCOUNT:certificate/XXXX"
