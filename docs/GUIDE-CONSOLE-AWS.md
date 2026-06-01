@@ -274,16 +274,31 @@ Ou si tu veux un Subnet Group :
 
 **Navigation :** RDS → **Databases** → **Create database**
 
+**Database creation method :**
+
+Deux options possibles (résultat identique, niveau de détail différent) :
+
+| Option | Quand l'utiliser |
+|--------|-----------------|
+| **Easy create** | Vous voulez une création rapide avec defaults AWS |
+| **Full configuration** | ✅ **Recommandé** - Contrôle total des paramètres |
+
+**Pour ce guide, nous utilisons "Full configuration"** (plus de contrôle).
+
+---
+
 **Engine options :**
 - Engine type : ✅ **MySQL**
-- Engine version : **MySQL 8.0.37** (ou plus récent)
+- Engine version : **MySQL 8.4.8** (ou plus récent, 8.0.37 minimum)
 
-> 💡 MySQL 8.0 est compatible MariaDB 10.11 - vos drivers `mysql2` et schémas fonctionnent sans modification.
+> 💡 MySQL 8.0+ est compatible MariaDB 10.11 - vos drivers `mysql2` et schémas fonctionnent sans modification.
 
 **Templates :**
 - ✅ **Dev/Test** ou **Production** (selon ton besoin)
 
-**Settings :**
+---
+
+**Settings - Credentials :**
 
 | Champ | Valeur |
 |-------|--------|
@@ -291,29 +306,58 @@ Ou si tu veux un Subnet Group :
 | Master username | `devops_user` |
 | Master password | `VotreMotDePasse32CaracMin!` |
 | Confirm password | (répéter) |
+| Credentials management | **Self managed** |
+
+---
 
 **Instance configuration :**
-- DB instance class : **Burstable classes (t3)** → `db.t3.micro` (portfolio) ou `db.t3.small`
+
+| Champ | Valeur |
+|-------|--------|
+| DB instance class | **Burstable classes (t4g)** → `db.t4g.micro` ← **Free Tier eligible** |
+| Storage type | **General Purpose SSD (gp2)** |
+| Allocated storage | **20 GiB** |
+
+---
 
 **Availability & durability :**
-- Multi-AZ : **No** (coûteux, optionnel pour portfolio)
+
+| Champ | Valeur |
+|-------|--------|
+| Deployment options | **Single-AZ DB instance** |
+| Multi-AZ | **No** (coûteux, optionnel pour portfolio) |
+
+---
 
 **Connectivity :**
 
 | Champ | Valeur |
 |-------|--------|
 | Virtual private cloud (VPC) | `ecommerce-vpc` |
-| DB subnet group | `ecommerce-db-subnet-group` (optionnel) |
-| Public access | **Yes** (pour portfolio, sinon No) |
-| VPC security group | **Choose existing** → `ecommerce-sg-rds` |
+| DB subnet group | `ecommerce-db-subnet-group` |
+| Public access | **No** ← (Si Subnet Group utilisé) |
+| VPC security group (firewall) | **Choose existing** → `ecommerce-sg-rds` |
+| Availability Zone | **No preference** |
+
+> ⚠️ **Règle de Public access :**
+> - Si tu utilises **Subnet Group** (réseau privé) → Public access = **No**
+> - Si tu n'utilises PAS Subnet Group → Public access = **Yes**
+>
+> Nous utilisons Subnet Group, donc **Public access = No**.
+
+---
 
 **Additional configuration :**
 
 | Champ | Valeur |
 |-------|--------|
 | Initial database name | `ecommerce_db` |
+| DB port | `3306` |
+| Parameter group | `default:mysql8.4` |
+| Option group | `default:mysql-8-4` |
 | Backup retention period | **7 days** |
-| ✅ Enable encryption | Coché |
+| Database encryption | ✅ **Enable encryption** (Coché) |
+| Monitoring | **Database Insights - Standard** |
 
 Cliquer **Create database** → Attendre **~5-10 minutes**
 
