@@ -122,7 +122,7 @@ Les subnets DB sont séparés des subnets privés EKS pour isoler la couche donn
 | VPC ID | Sélectionner `ecommerce-vpc` |
 | Subnet name | `ecommerce-db-a` |
 | Availability Zone | `eu-west-1a` |
-| IPv4 CIDR block | `10.0.20.0/24` |
+| IPv4 CIDR block | `10.0.48.0/20` |
 
 Cliquer **Add new subnet** et remplir le second :
 
@@ -132,12 +132,22 @@ Cliquer **Add new subnet** et remplir le second :
 |-------|--------|
 | Subnet name | `ecommerce-db-b` |
 | Availability Zone | `eu-west-1b` |
-| IPv4 CIDR block | `10.0.21.0/24` |
+| IPv4 CIDR block | `10.0.64.0/20` |
+
+Cliquer **Add new subnet** et remplir le troisième :
+
+**Subnet DB zone C :**
+
+| Champ | Valeur |
+|-------|--------|
+| Subnet name | `ecommerce-db-c` |
+| Availability Zone | `eu-west-1c` |
+| IPv4 CIDR block | `10.0.80.0/20` |
 
 Cliquer **Create subnet**.
 
 **Associer à la route table privée :**  
-Pour chaque subnet DB, onglet **Route table** → **Edit route table association** → sélectionner la route table privée de la même AZ.
+Pour chaque subnet DB (3 au total), onglet **Route table** → **Edit route table association** → sélectionner la route table privée de la même AZ.
 
 ---
 
