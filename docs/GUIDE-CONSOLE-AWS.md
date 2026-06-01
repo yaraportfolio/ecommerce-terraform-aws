@@ -78,7 +78,7 @@ Le VPC est le réseau privé virtuel qui isole toute votre infrastructure. Pense
 | IPv4 CIDR block | `10.0.0.0/16` |
 | Number of Availability Zones | **3** |
 | Number of public subnets | **3** |
-| Number of private subnets | **2** (eu-west-1a, eu-west-1b) |
+| Number of private subnets | **3** |
 | NAT gateways | **Zonal - 1 per AZ** ou **Régional - nouveau** |
 | VPC endpoints | **S3 Gateway** (réduit coûts NAT) |
 
@@ -103,7 +103,7 @@ EKS a besoin de tags spécifiques sur les subnets pour créer automatiquement de
 5. Ajouter : Clé = `kubernetes.io/role/elb` | Valeur = `1`
 6. Cliquer **Save**
 
-**Pour chaque subnet privé (2 subnets avec "private" dans le nom : eu-west-1a, eu-west-1b) :**
+**Pour chaque subnet privé (3 subnets avec "private" dans le nom) :**
 1. Même procédure
 2. Ajouter : Clé = `kubernetes.io/role/internal-elb` | Valeur = `1`
 
