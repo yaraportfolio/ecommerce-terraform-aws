@@ -555,7 +555,7 @@ Pas besoin de les créer dans ECR (déjà disponibles publiquement sur GHCR).
 
 ## 7. EKS - Cluster Kubernetes
 
-EKS crée et gère le control plane Kubernetes. Vous gérez les worker nodes via des Node Groups.
+EKS crée et gère le control plane Kubernetes. EKS Auto Mode gère les worker nodes automatiquement.
 
 ### 7.1 Créer le cluster EKS
 
@@ -565,14 +565,10 @@ EKS crée et gère le control plane Kubernetes. Vous gérez les worker nodes via
 
 **Configuration options :**
 
-Deux choix s'offrent à vous :
-
 | Option | Recommandé | Raison |
 |--------|-----------|--------|
 | **Quick configuration (with EKS Auto Mode)** | ✅ **OUI - Choisir ceci** | Automatisé, defaults production-grade, idéal pour portfolio |
-| Custom configuration | Non | Plus complexe, plus de contrôle (optionnel) |
-
-> 💡 **Pour un portfolio, "Quick configuration" est plus simple** : EKS Auto Mode automatise la création des nodes et de la provisioning.
+| Custom configuration | Non | Plus complexe, plus de contrôle |
 
 **Cliquer "Quick configuration (with EKS Auto Mode)"**
 
@@ -584,8 +580,6 @@ Deux choix s'offrent à vous :
 |-------|--------|
 | Name | `ecommerce-cluster` |
 | Kubernetes version | **1.29** (ou plus récent) |
-
-> 💡 Quick configuration utilise les defaults recommandés par AWS. Pas besoin de configurer le Cluster service role manuellement.
 
 **Step 2 - Specify networking :**
 
@@ -602,9 +596,12 @@ Deux choix s'offrent à vous :
 - ✅ CoreDNS
 - ✅ kube-proxy
 - ✅ Amazon VPC CNI
-- ✅ Amazon EBS CSI Driver
 - ✅ Metrics Server (requis pour HPA/autoscaling)
-- ✅ AWS Secrets and Configuration Provider (optionnel - seulement si vous utilisez AWS Secrets Manager)
+- ✅ **AWS Secrets and Configuration Provider** (requis pour AWS Secrets Manager)
+
+> ⚠️ **Ne pas cocher "Amazon EBS CSI Driver"** — incompatible avec EKS Auto Mode (Create failed).
+
+> ℹ️ **AWS Load Balancer Controller** n'est PAS dans cette liste. Il sera installé séparément via Helm à l'étape 7.5.
 
 **Step 5 - Configure selected add-ons settings :** Laisser les versions par défaut
 
@@ -616,46 +613,33 @@ Attendre **~12 minutes** que le statut passe à `Active`.
 
 ### 7.2 Node Pools (Gérés automatiquement avec EKS Auto Mode)
 
-> ℹ️ **Avec "Quick configuration (with EKS Auto Mode)", AWS gère TOUS les nodes automatiquement.**
->
-> **Vous n'avez RIEN à faire ici !** Les node pools sont visibles dans la console mais gérés 100% par AWS.
+> ℹ️ **Avec EKS Auto Mode, AWS gère TOUS les nodes automatiquement.**
 > - Scaling automatique ✅
 > - Santé des nodes vérifiée ✅
-> - Mises à jour gérées ✅
 > - Pas de Node Groups à créer manuellement
 
 **Vérification :** EKS → `ecommerce-cluster` → Onglet **Compute**
-- Vous verrez 2 node pools pré-créés : `general-purpose` et `system`
-- Vous verrez N nodes Ready (créés automatiquement)
-- **C'est tout ce qu'il faut ! Passez à l'étape 7.3.**
-
-> 💡 **Advanced (optionnel)** : Si vous avez besoin de configurations très spécifiques, vous pouvez créer des Node Groups manuels via **Add node group**, mais ce n'est pas recommandé pour un portfolio simple.
+- 2 node pools pré-créés : `general-purpose` et `system`
+- Nodes avec statut `Ready` créés automatiquement selon la charge
 
 ---
 
 ### 7.3 Configurer kubectl
 
-**Option A : Via AWS Console (le plus simple) ✅**
-
-EKS → `ecommerce-cluster` → Bouton **"Connect"** (en haut à droite)
-
-AWS CloudShell s'ouvre automatiquement avec kubectl configuré.
+**Option A : Via votre machine locale ✅ (recommandé)**
 
 ```bash
-# La commande s'affiche automatiquement
-source kubectl-connect ecommerce-cluster
+# Configurer kubectl pour pointer vers EKS
+aws eks update-kubeconfig --region eu-west-1 --name ecommerce-cluster
 
-# Vérifier les nodes
+# Vérifier la connexion
 kubectl get nodes
-# Les nodes doivent apparaître avec le statut Ready
-# (nombre variable avec EKS Auto Mode - 2, 3, 4+ selon la charge)
+# → 2+ nodes avec statut Ready
 ```
 
----
+**Option B : Via AWS CloudShell**
 
-**Option B : Via votre machine locale (si vous préférez)**
-
-Depuis votre terminal local (avec AWS CLI + kubectl installés) :
+EKS → `ecommerce-cluster` → Bouton **"Connect"** → CloudShell
 
 ```bash
 aws eks update-kubeconfig --region eu-west-1 --name ecommerce-cluster
@@ -664,55 +648,235 @@ kubectl get nodes
 
 ---
 
-### 7.4 Déployer les microservices via Helm
+### 7.4 Enregistrer l'OIDC Provider (requis pour IRSA)
 
-#### Déploiement EKS (AWS Secrets Manager + CSI Driver) ✅
+> ℹ️ **IRSA (IAM Roles for Service Accounts)** permet aux pods Kubernetes d'assumer des rôles IAM AWS sans stocker de credentials. L'OIDC Provider est la clé de confiance entre EKS et IAM.
 
-```bash
-# Créer le namespace
-kubectl create namespace ecommerce
+**Étape 1 — Récupérer l'URL OIDC du cluster :**
 
-# Déployer via Helm (AVEC AWS Secrets Manager)
-# Note: Remplacer ROLE_ARN par l'ARN de votre rôle IAM créé précédemment
-helm install ecommerce-microservices . \
-  --namespace ecommerce \
-  --set image.registryType="ghcr" \
-  --set image.ghcr.registry="ghcr.io" \
-  --set image.ghcr.owner="yaraportfolio" \
-  --set awsSecretsManager.enabled=true \
-  --set awsSecretsManager.region=eu-west-1 \
-  --set awsSecretsManager.iamRoleArn="arn:aws:iam::020379956170:role/ecommerce-eks-secrets-role"
+EKS → `ecommerce-cluster` → onglet **Overview** → copier la valeur **OpenID Connect provider URL**
+
+```
+https://oidc.eks.eu-west-1.amazonaws.com/id/XXXXXXXXXXXX
 ```
 
-**Prérequis :**
-- ✅ ASCP add-on installé sur le cluster EKS
-- ✅ Rôle IAM `ecommerce-eks-secrets-role` créé avec IRSA
-- ✅ 2 secrets créés dans AWS Secrets Manager : `ecommerce/db/credentials` et `ecommerce/jwt/secret`
+**Étape 2 — Créer le provider dans IAM :**
+
+1. **IAM** → **Identity providers** → **Add provider**
+2. **Provider type :** `OpenID Connect`
+3. **Provider URL :** coller l'URL copiée ci-dessus
+4. Cliquer **Get thumbprint**
+5. **Audience :** `sts.amazonaws.com`
+6. Cliquer **Add provider**
+
+**Vérification :** IAM → Identity providers → vous devez voir `oidc.eks.eu-west-1.amazonaws.com/id/XXXX` avec le type `OpenID Connect`.
 
 ---
 
-**Vérifier dans la console EKS :**  
-EKS → `ecommerce-cluster` → **Resources** → **Pods** → Namespace `ecommerce`  
-Vous devez voir 8 pods (2 réplicas × 4 services) avec le statut `Running`.
+### 7.5 Installer AWS Load Balancer Controller
 
-**Vérifier les ressources CSI :**
-```bash
-kubectl get secretproviderclass -n ecommerce
-kubectl get serviceaccount ecommerce-sa -n ecommerce
-kubectl get secret microservices-secret -n ecommerce  # auto-créé par CSI
+Le **AWS Load Balancer Controller** crée automatiquement un ALB (Application Load Balancer) pour exposer les microservices sur Internet.
+
+#### A. Créer la Policy IAM
+
+1. **IAM** → **Policies** → **Create policy**
+2. Cliquer l'onglet **JSON** et coller le contenu de la [policy officielle AWS LBC v2.11](https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json)
+3. Cliquer **Next**
+4. **Policy name :** `AWSLoadBalancerControllerIAMPolicy`
+5. Cliquer **Create policy**
+
+---
+
+#### B. Créer le Rôle IAM avec IRSA
+
+1. **IAM** → **Roles** → **Create role**
+2. **Trusted entity type :** `Web identity`
+3. **Identity provider :** sélectionner `oidc.eks.eu-west-1.amazonaws.com/id/XXXXXXXXXXXX`
+4. **Audience :** `sts.amazonaws.com`
+5. Cliquer **Next**
+6. Rechercher et cocher `AWSLoadBalancerControllerIAMPolicy`
+7. Cliquer **Next**
+8. **Role name :** `AWSLoadBalancerControllerRole`
+9. Cliquer **Create role**
+
+**Étape critique — Restreindre le trust policy au bon ServiceAccount :**
+
+IAM → Roles → `AWSLoadBalancerControllerRole` → onglet **Trust relationships** → **Edit trust policy**
+
+Remplacer le contenu par (adapter `ACCOUNT_ID` et `OIDC_ID`) :
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/oidc.eks.eu-west-1.amazonaws.com/id/OIDC_ID"
+    },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "oidc.eks.eu-west-1.amazonaws.com/id/OIDC_ID:sub": "system:serviceaccount:kube-system:aws-load-balancer-controller"
+      }
+    }
+  }]
+}
 ```
+
+Cliquer **Update policy**
+
+---
+
+#### C. Installer via Helm (terminal local)
+
+Récupérer le **VPC ID** : VPC → `ecommerce-vpc` → copier le **VPC ID** (format `vpc-xxxxxxxxxxxxxxxxx`)
+
+Récupérer l'**ARN du rôle** : IAM → Roles → `AWSLoadBalancerControllerRole` → copier l'ARN
+
+```bash
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update
+
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=ecommerce-cluster \
+  --set vpcId=VPC_ID \
+  --set region=eu-west-1 \
+  --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=ARN_DU_ROLE
+```
+
+**Vérification :**
+```bash
+kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
+# → 2 pods avec READY 1/1
+```
+
+---
+
+### 7.6 Configurer le Security Group RDS pour EKS
+
+> ℹ️ Les nœuds EKS Auto Mode ont leur propre Security Group créé automatiquement par AWS (différent de `ecommerce-sg-eks`). Il faut l'autoriser à accéder au port 3306 de RDS.
+
+**Étape 1 — Identifier le Security Group des nœuds EKS :**
+
+EC2 → **Instances** → cliquer sur un nœud EKS (nom commence par `i-`) → onglet **Security** → noter le **Security Group ID** (ex: `sg-0xxxxxxxxxxxxxxxxx`)
+
+**Étape 2 — Ajouter la règle au Security Group RDS :**
+
+EC2 → **Security Groups** → chercher le SG attaché à RDS (visible dans RDS → `ecommerce-mysql` → onglet **Connectivity & security** → **VPC security groups**)
+
+Cliquer sur ce SG → onglet **Inbound rules** → **Edit inbound rules** → **Add rule** :
+
+| Champ | Valeur |
+|-------|--------|
+| Type | `MySQL/Aurora` |
+| Protocol | TCP |
+| Port range | `3306` |
+| Source | `Custom` → sélectionner le SG des nœuds EKS |
+| Description | `EKS Auto Mode nodes` |
+
+Cliquer **Save rules**
+
+---
+
+### 7.7 Créer les secrets dans AWS Secrets Manager
+
+**Navigation :** Barre de recherche → `Secrets Manager` → **AWS Secrets Manager**
+
+#### Secret 1 : DB Credentials
+
+1. **Store a new secret**
+2. **Secret type :** `Other type of secret`
+3. **Key/value pairs :**
+   - `DB_USER` → `devops_user`
+   - `DB_PASSWORD` → `VOTRE_MOT_DE_PASSE`
+4. Cliquer **Next**
+5. **Secret name :** `ecommerce/db/credentials`
+6. Cliquer **Next** → **Next** → **Store**
+
+#### Secret 2 : JWT Secret
+
+1. **Store a new secret**
+2. **Secret type :** `Other type of secret`
+3. **Key/value pairs :**
+   - `JWT_SECRET` → `VOTRE_JWT_SECRET_LONG_ET_COMPLEXE`
+4. Cliquer **Next**
+5. **Secret name :** `ecommerce/jwt/secret`
+6. Cliquer **Next** → **Next** → **Store**
+
+---
+
+### 7.8 Déployer les microservices via Helm
+
+#### Cloner le repository
+
+```bash
+git clone https://github.com/yaraportfolio/ecommerce-k8s-helm.git
+cd ecommerce-k8s-helm
+```
+
+#### Déployer
+
+```bash
+# Récupérer l'endpoint RDS
+RDS_HOST=$(aws rds describe-db-instances \
+  --db-instance-identifier ecommerce-mysql \
+  --region eu-west-1 \
+  --query "DBInstances[0].Endpoint.Address" \
+  --output text)
+
+# Créer le namespace
+kubectl create namespace ecommerce
+
+# Déployer via Helm
+helm install ecommerce-microservices . \
+  --namespace ecommerce \
+  --set database.host=$RDS_HOST \
+  --set database.password="VOTRE_MOT_DE_PASSE" \
+  --set jwt.secret="VOTRE_JWT_SECRET"
+```
+
+> ℹ️ Les images GHCR sont **publiques** — aucun secret de registry requis.
+
+#### Vérifier le déploiement
+
+```bash
+# Pods Running
+kubectl get pods -n ecommerce
+# → 4 pods avec READY 1/1
+
+# Récupérer l'URL de l'ALB (peut prendre 2-3 minutes)
+kubectl get ingress -n ecommerce
+# → COLONNE ADDRESS affiche le DNS de l'ALB
+
+# Tester les endpoints
+ALB=$(kubectl get ingress api-ingress -n ecommerce \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+curl http://$ALB/api/auth/health
+# → {"status":"ok","database":"connected"}
+
+curl http://$ALB/api/products
+# → Liste des produits JSON
+```
+
+**Vérifier dans la console AWS :**
+- EC2 → **Load Balancers** → `ecommerce-alb` → statut **Active**
+- EKS → `ecommerce-cluster` → **Resources** → **Pods** → Namespace `ecommerce` → 4 pods Running
 
 ---
 
 ## 8. Frontend Option A - EC2 + Auto Scaling
 
-Cette option déploie le frontend NGINX + React sur des VMs EC2 classiques avec autoscaling.
+Cette option déploie le frontend React (build statique) servi par **NGINX directement sur EC2**, sans Docker. L'Auto Scaling Group assure la haute disponibilité.
+
+> 💡 **Indicateur visuel portfolio** : La variable `VITE_DEPLOY_PLATFORM=ec2` affiche un badge **"☁️ EC2 + ASG"** dans la navbar du site.
+
+---
 
 ### 8.1 Créer un rôle IAM pour les instances EC2
 
-**Navigation :** Barre de recherche → `IAM` → **IAM**
-
-**Roles → Create role**
+**Navigation :** IAM → **Roles** → **Create role**
 
 | Champ | Valeur |
 |-------|--------|
@@ -720,15 +884,9 @@ Cette option déploie le frontend NGINX + React sur des VMs EC2 classiques avec 
 | Use case | **EC2** |
 
 Cliquer **Next** → Rechercher et ajouter ces policies :
-- `AmazonEC2ContainerRegistryReadOnly` ← pour puller les images ECR
-- `AmazonSSMManagedInstanceCore` ← pour Session Manager (accès SSH sans clé)
+- `AmazonSSMManagedInstanceCore` ← accès Session Manager (sans clé SSH)
 
-**Role name :** `ecommerce-frontend-ec2-role`
-
-Cliquer **Create role**
-
-**Créer l'instance profile :**  
-IAM → Roles → `ecommerce-frontend-ec2-role` → l'instance profile est créé automatiquement avec le même nom.
+**Role name :** `ecommerce-frontend-ec2-role` → **Create role**
 
 ---
 
@@ -739,61 +897,117 @@ IAM → Roles → `ecommerce-frontend-ec2-role` → l'instance profile est cré�
 | Champ | Valeur |
 |-------|--------|
 | Launch template name | `ecommerce-frontend-lt` |
-| Template version description | `v1 - NGINX + React ECR` |
-| ✅ Provide guidance to help me set up a template | Coché |
+| Template version description | `v1 - NGINX + React direct` |
 
 **Application and OS Images :**
-- Cliquer **Quick Start** → **Amazon Linux 2023 AMI**
-- Architecture : `x86_64`
+- **Quick Start** → **Amazon Linux 2023 AMI** → `x86_64`
 
-**Instance type :** `t3.medium`
+**Instance type :** `t3.micro` (Free Tier) ou `t3.small`
+
+**Key pair :** Aucune (on utilisera Session Manager)
 
 **Network settings :**
 - Security groups : `ecommerce-sg-frontend`
 
 **Advanced details :**
 - IAM instance profile : `ecommerce-frontend-ec2-role`
-- User data : Cliquer la zone de texte et coller le script suivant
+- User data : coller le script suivant
 
 ```bash
 #!/bin/bash
-# Installer Docker
-yum update -y
-yum install docker -y
-service docker start
-usermod -a -G docker ec2-user
-systemctl enable docker
+# Variables — adapter l'URL ALB EKS
+ALB_URL="http://ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com"
 
-# Récupérer l'Account ID
-ACCOUNT_ID=$(curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/ \
-  | head -1 | cut -d'/' -f3 2>/dev/null || \
-  aws sts get-caller-identity --query Account --output text)
+# Mise à jour système + outils
+dnf update -y
+dnf install -y nginx git nodejs npm
 
-# Login ECR
-aws ecr get-login-password --region eu-west-1 | \
-  docker login --username AWS \
-  --password-stdin ${ACCOUNT_ID}.dkr.ecr.eu-west-1.amazonaws.com
+# Cloner le frontend
+cd /opt
+git clone https://github.com/yaraportfolio/ecommerce-frontend.git
+cd ecommerce-frontend
 
-# URL de l'ALB interne EKS (à remplacer après création EKS)
-BACKEND_URL="http://INTERNAL_ALB_DNS_ICI"
+# Build React avec la plateforme EC2 + URL backend
+cat > .env.production << EOF
+VITE_DEPLOY_PLATFORM=ec2
+EOF
 
-# Lancer le frontend
-docker run -d \
-  --name ecommerce-frontend \
-  -p 80:80 \
-  -e BACKEND_URL=$BACKEND_URL \
-  -e BACKEND_HOST="api.ecommerce.local" \
-  --restart always \
-  ${ACCOUNT_ID}.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/frontend:latest
+npm ci
+npm run build
+
+# Copier le build vers NGINX
+cp -r dist/* /usr/share/nginx/html/
+
+# Configurer NGINX (proxy backend + SPA fallback)
+cat > /etc/nginx/conf.d/ecommerce.conf << 'NGINXEOF'
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # SPA - toutes les routes vers index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy vers les microservices EKS via ALB
+    location /api/ {
+        proxy_pass ALB_PLACEHOLDER/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+NGINXEOF
+
+# Remplacer le placeholder par l'URL ALB réelle
+sed -i "s|ALB_PLACEHOLDER|${ALB_URL}|g" /etc/nginx/conf.d/ecommerce.conf
+
+# Démarrer NGINX
+systemctl enable nginx
+systemctl start nginx
 ```
 
-> ⚠️ Remplacer `INTERNAL_ALB_DNS_ICI` par l'endpoint de l'ALB interne EKS récupéré après `kubectl get ingress -n ecommerce`.
+> ⚠️ Remplacer `ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com` par l'URL réelle de votre ALB EKS (visible dans EC2 → Load Balancers ou `kubectl get ingress -n ecommerce`).
 
 Cliquer **Create launch template**
 
 ---
 
-### 8.3 Créer l'Auto Scaling Group
+### 8.3 Se connecter à l'instance EC2 (Session Manager)
+
+> ℹ️ Pas besoin de clé SSH. Session Manager permet une connexion sécurisée directement depuis la console AWS.
+
+1. EC2 → **Instances** → sélectionner l'instance frontend
+2. Cliquer **Connect** → onglet **Session Manager** → **Connect**
+3. Un terminal s'ouvre dans le navigateur
+
+```bash
+# Vérifier que NGINX tourne
+sudo systemctl status nginx
+
+# Vérifier le build React
+ls /usr/share/nginx/html/
+
+# Voir les logs NGINX
+sudo tail -f /var/log/nginx/access.log
+
+# Tester le proxy backend
+curl http://localhost/api/auth/health
+```
+
+**Pour mettre à jour le frontend manuellement :**
+```bash
+cd /opt/ecommerce-frontend
+sudo git pull
+sudo npm ci
+sudo npm run build
+sudo cp -r dist/* /usr/share/nginx/html/
+sudo systemctl reload nginx
+```
+
+---
+
+### 8.4 Créer l'Auto Scaling Group
 
 **Navigation :** EC2 → **Auto Scaling Groups** → **Create Auto Scaling group**
 
@@ -825,22 +1039,21 @@ Cliquer **Create launch template**
 | Champ | Valeur |
 |-------|--------|
 | Desired capacity | `2` |
-| Min desired capacity | `2` |
-| Max desired capacity | `6` |
+| Min desired capacity | `1` |
+| Max desired capacity | `4` |
 
 **Automatic scaling :**
 - ✅ **Target tracking scaling policy**
 - Metric type : **Average CPU utilization**
 - Target value : `70`
 
-**Step 5 - Add notifications :** Optionnel
-
 **Step 6 - Add tags :**
 
 | Key | Value |
 |-----|-------|
-| Name | `ecommerce-frontend` |
+| Name | `ecommerce-frontend-ec2` |
 | Env | `prod` |
+| Platform | `ec2` |
 
 Cliquer **Create Auto Scaling group**
 
@@ -849,6 +1062,8 @@ Cliquer **Create Auto Scaling group**
 ## 9. Frontend Option B - Elastic Beanstalk
 
 Beanstalk gère tout automatiquement : EC2, ALB, autoscaling. Idéal pour comprendre le modèle PaaS.
+
+> 💡 **Indicateur visuel portfolio** : La variable `VITE_DEPLOY_PLATFORM=beanstalk` affiche un badge **"☁️ Elastic Beanstalk"** dans la navbar du site.
 
 **Navigation :** Barre de recherche → `Elastic Beanstalk` → **Elastic Beanstalk**
 
@@ -926,6 +1141,8 @@ Cliquer **Submit** → Attendre ~5 minutes
 ## 10. Frontend Option C - ECS Fargate
 
 ECS Fargate exécute vos conteneurs sans gérer de serveurs. AWS provisionne les ressources de calcul à la demande.
+
+> 💡 **Indicateur visuel portfolio** : La variable `VITE_DEPLOY_PLATFORM=ecs` affiche un badge **"☁️ ECS Fargate"** dans la navbar du site.
 
 ### 10.1 Créer le cluster ECS
 
