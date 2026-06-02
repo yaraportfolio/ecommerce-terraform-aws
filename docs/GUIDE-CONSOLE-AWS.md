@@ -995,41 +995,7 @@ Cliquer **Create launch template**
 
 ---
 
-### 8.3 Se connecter à l'instance EC2 (Session Manager)
-
-> ℹ️ Pas besoin de clé SSH. Session Manager permet une connexion sécurisée directement depuis la console AWS.
-
-1. EC2 → **Instances** → sélectionner l'instance frontend
-2. Cliquer **Connect** → onglet **Session Manager** → **Connect**
-3. Un terminal s'ouvre dans le navigateur
-
-```bash
-# Vérifier que NGINX tourne
-sudo systemctl status nginx
-
-# Vérifier le build React
-ls /usr/share/nginx/html/
-
-# Voir les logs NGINX
-sudo tail -f /var/log/nginx/access.log
-
-# Tester le proxy backend
-curl http://localhost/api/auth/health
-```
-
-**Pour mettre à jour le frontend manuellement :**
-```bash
-cd /opt/ecommerce-frontend
-sudo git pull
-sudo npm ci
-sudo npm run build
-sudo cp -r dist/* /usr/share/nginx/html/
-sudo systemctl reload nginx
-```
-
----
-
-### 8.4 Créer l'Auto Scaling Group
+### 8.3 Créer l'Auto Scaling Group
 
 **Navigation :** EC2 → **Auto Scaling Groups** → **Create Auto Scaling group**
 
@@ -1078,6 +1044,43 @@ sudo systemctl reload nginx
 | Platform | `ec2` |
 
 Cliquer **Create Auto Scaling group**
+
+Attendre ~3-5 minutes que les instances démarrent, que le User Data s'exécute (clone + build + NGINX), et que le health check passe.
+
+---
+
+### 8.4 Se connecter à l'instance EC2 (Session Manager)
+
+> ℹ️ Pas besoin de clé SSH. Session Manager permet une connexion sécurisée directement depuis la console AWS.
+
+1. EC2 → **Instances** → sélectionner une instance `ecommerce-frontend-ec2`
+2. Cliquer **Connect** → onglet **Session Manager** → **Connect**
+3. Un terminal s'ouvre dans le navigateur
+
+```bash
+# Vérifier que NGINX tourne
+sudo systemctl status nginx
+
+# Vérifier que le build React est présent
+ls /usr/share/nginx/html/
+
+# Voir les logs NGINX
+sudo tail -f /var/log/nginx/access.log
+
+# Tester le proxy backend (ALB interne EKS)
+curl http://localhost/api/auth/health
+# → {"status":"ok","database":"connected"}
+```
+
+**Pour mettre à jour le frontend manuellement :**
+```bash
+cd /opt/ecommerce-frontend
+sudo git pull
+sudo npm ci
+sudo npm run build
+sudo cp -r dist/* /usr/share/nginx/html/
+sudo systemctl reload nginx
+```
 
 ---
 
