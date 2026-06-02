@@ -887,7 +887,97 @@ internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com
 
 ---
 
-## 8. Frontend Option A - EC2 + Auto Scaling
+## 8. Application Load Balancer
+
+L'ALB est le point d'entrée unique pour le trafic internet. Il distribue vers les instances frontend. **Il doit être créé avant les options frontend (9/10/11) car elles s'y attachent.**
+
+### 8.1 Créer le Target Group
+
+**Navigation :** EC2 → **Target Groups** (menu de gauche, section Load Balancing) → **Create target group**
+
+**Basic configuration :**
+
+| Champ | Valeur |
+|-------|--------|
+| Target type | **Instances** (pour EC2/Beanstalk) ou **IP** (pour ECS Fargate) |
+| Target group name | `ecommerce-tg-frontend` |
+| Protocol | **HTTP** |
+| Port | `80` |
+| VPC | `ecommerce-vpc` |
+
+**Health checks :**
+
+| Champ | Valeur |
+|-------|--------|
+| Health check protocol | HTTP |
+| Health check path | `/` |
+| Healthy threshold | `2` |
+| Unhealthy threshold | `3` |
+| Timeout | `5` seconds |
+| Interval | `30` seconds |
+
+Cliquer **Next** → **Create target group**
+
+---
+
+### 8.2 Créer l'ALB public
+
+**Navigation :** EC2 → **Load Balancers** → **Create load balancer**
+
+Sélectionner **Application Load Balancer** → **Create**
+
+**Basic configuration :**
+
+| Champ | Valeur |
+|-------|--------|
+| Load balancer name | `ecommerce-alb-pub` |
+| Scheme | **Internet-facing** |
+| IP address type | **IPv4** |
+
+**Network mapping :**
+- VPC : `ecommerce-vpc`
+- Mappings : Cocher les **3 AZ** et sélectionner les **subnets publics** correspondants
+
+**Security groups :**
+- Retirer le SG par défaut → Ajouter `ecommerce-sg-alb`
+
+**Listeners and routing :**
+
+**Listener 1 - HTTP:80 (redirection vers HTTPS) :**
+- Protocol : `HTTP` | Port : `80`
+- Default action : **Redirect to HTTPS**
+- Port : `443` | Status code : `301`
+
+**Listener 2 - HTTPS:443 :**
+- Protocol : `HTTPS` | Port : `443`
+- Default action : **Forward to** `ecommerce-tg-frontend`
+- Security policy : `ELBSecurityPolicy-TLS13-1-2-2021-06`
+- Certificate : Sélectionner votre certificat ACM (voir encadré ci-dessous)
+
+> **Obtenir un certificat ACM :**  
+> Barre de recherche → `Certificate Manager` → **Request certificate**  
+> → **Request a public certificate** → Entrer votre domaine (ex. `ecommerce.votredomaine.com`)  
+> → Validation DNS → Suivre les instructions pour ajouter l'enregistrement CNAME dans votre DNS  
+> → Attendre ~5 minutes que le certificat soit émis
+
+Cliquer **Create load balancer**
+
+**Récupérer le DNS de l'ALB :**  
+Dans la liste des Load Balancers → `ecommerce-alb-pub` → Colonne **DNS name**  
+Ex. `ecommerce-alb-pub-123456.eu-west-1.elb.amazonaws.com`
+
+---
+
+### 8.3 Vérifier le routage
+
+**Navigation :** EC2 → **Target Groups** → `ecommerce-tg-frontend` → Onglet **Targets**
+
+Les instances (EC2, ECS tasks) apparaîtront ici après la création de l'option frontend choisie (sections 9/10/11). Statut attendu : **healthy**.  
+Si **unhealthy** → vérifier que le SG Frontend autorise le port 80 depuis le SG ALB.
+
+---
+
+## 9. Frontend Option A - EC2 + Auto Scaling
 
 Cette option déploie le frontend React (build statique) servi par **NGINX directement sur EC2**, sans Docker. L'Auto Scaling Group assure la haute disponibilité.
 
@@ -1013,12 +1103,15 @@ Cliquer **Create launch template**
 |-------|--------|
 | VPC | `ecommerce-vpc` |
 | Availability Zones and subnets | Sélectionner les **3 subnets publics** |
+| Availability Zone distribution | **Balanced best effort** (défaut) ← laisser tel quel |
+
+> 💡 **Balanced best effort** : si une AZ tombe, l'ASG lance les instances dans les autres AZ disponibles. C'est le comportement le plus résilient pour ce portfolio.
 
 **Step 3 - Configure advanced options :**
 - ✅ **Attach to an existing load balancer**
-- Target groups : sélectionner `ecommerce-tg-frontend` (créé à l'étape 11)
+- Target groups : sélectionner `ecommerce-tg-frontend` (créé à l'étape 8)
 
-> ℹ️ Si le Target Group n'existe pas encore, cocher **No load balancer** et revenir après l'étape 11.
+> ℹ️ Si le Target Group n'existe pas encore, cocher **No load balancer** et revenir après l'étape 8.
 
 - Health check grace period : `120` secondes
 
@@ -1084,7 +1177,7 @@ sudo systemctl reload nginx
 
 ---
 
-## 9. Frontend Option B - Elastic Beanstalk
+## 10. Frontend Option B - Elastic Beanstalk
 
 Beanstalk gère tout automatiquement : EC2, ALB, autoscaling. Idéal pour comprendre le modèle PaaS.
 
@@ -1163,7 +1256,7 @@ Cliquer **Submit** → Attendre ~5 minutes
 
 ---
 
-## 10. Frontend Option C - ECS Fargate
+## 11. Frontend Option C - ECS Fargate
 
 ECS Fargate exécute vos conteneurs sans gérer de serveurs. AWS provisionne les ressources de calcul à la demande.
 
@@ -1248,101 +1341,11 @@ Cliquer **Create**
 
 **Load balancing :**
 - ✅ **Use an existing load balancer**
-- Load balancer : `ecommerce-alb-pub` (créé à l'étape 11)
+- Load balancer : `ecommerce-alb-pub` (créé à l'étape 8)
 - Listener : **Use an existing listener** → `443 : HTTPS`
 - Target group : `ecommerce-tg-frontend`
 
 Cliquer **Deploy**
-
----
-
-## 11. Application Load Balancer
-
-L'ALB est le point d'entrée unique pour le trafic internet. Il distribue vers les instances frontend.
-
-### 11.1 Créer le Target Group
-
-**Navigation :** EC2 → **Target Groups** (menu de gauche, section Load Balancing) → **Create target group**
-
-**Basic configuration :**
-
-| Champ | Valeur |
-|-------|--------|
-| Target type | **Instances** (pour EC2/Beanstalk) ou **IP** (pour ECS Fargate) |
-| Target group name | `ecommerce-tg-frontend` |
-| Protocol | **HTTP** |
-| Port | `80` |
-| VPC | `ecommerce-vpc` |
-
-**Health checks :**
-
-| Champ | Valeur |
-|-------|--------|
-| Health check protocol | HTTP |
-| Health check path | `/` |
-| Healthy threshold | `2` |
-| Unhealthy threshold | `3` |
-| Timeout | `5` seconds |
-| Interval | `30` seconds |
-
-Cliquer **Next** → **Create target group**
-
----
-
-### 11.2 Créer l'ALB
-
-**Navigation :** EC2 → **Load Balancers** → **Create load balancer**
-
-Sélectionner **Application Load Balancer** → **Create**
-
-**Basic configuration :**
-
-| Champ | Valeur |
-|-------|--------|
-| Load balancer name | `ecommerce-alb-pub` |
-| Scheme | **Internet-facing** |
-| IP address type | **IPv4** |
-
-**Network mapping :**
-- VPC : `ecommerce-vpc`
-- Mappings : Cocher les **3 AZ** et sélectionner les **subnets publics** correspondants
-
-**Security groups :**
-- Retirer le SG par défaut → Ajouter `ecommerce-sg-alb`
-
-**Listeners and routing :**
-
-**Listener 1 - HTTP:80 (redirection vers HTTPS) :**
-- Protocol : `HTTP` | Port : `80`
-- Default action : **Redirect to HTTPS**
-- Port : `443` | Status code : `301`
-
-**Listener 2 - HTTPS:443 :**
-- Protocol : `HTTPS` | Port : `443`
-- Default action : **Forward to** `ecommerce-tg-frontend`
-- Security policy : `ELBSecurityPolicy-TLS13-1-2-2021-06`
-- Certificate : Sélectionner votre certificat ACM (voir encadré ci-dessous)
-
-> **Obtenir un certificat ACM :**  
-> Barre de recherche → `Certificate Manager` → **Request certificate**  
-> → **Request a public certificate** → Entrer votre domaine (ex. `ecommerce.votredomaine.com`)  
-> → Validation DNS → Suivre les instructions pour ajouter l'enregistrement CNAME dans votre DNS  
-> → Attendre ~5 minutes que le certificat soit émis
-
-Cliquer **Create load balancer**
-
-**Récupérer le DNS de l'ALB :**  
-Dans la liste des Load Balancers → `ecommerce-alb-pub` → Colonne **DNS name**  
-Ex. `ecommerce-alb-pub-123456.eu-west-1.elb.amazonaws.com`
-
----
-
-### 11.3 Vérifier le routage
-
-**Navigation :** EC2 → **Target Groups** → `ecommerce-tg-frontend` → Onglet **Targets**
-
-Vous devez voir vos instances (EC2, ECS tasks) avec le statut **healthy**.  
-Si le statut est **unhealthy** → vérifier que le SG Frontend autorise le port 80 depuis le SG ALB.
 
 ---
 
