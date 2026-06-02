@@ -161,6 +161,19 @@ Pour chaque subnet DB (3 au total), onglet **Route table** → **Edit route tabl
 
 Les Security Groups sont des pare-feux virtuels. La règle d'or : chaque couche ne parle qu'à la couche suivante, en référençant d'autres SGs (pas des plages IP).
 
+### Vue d'ensemble des Security Groups
+
+| Nom (tag) | Créé par | Rôle |
+|-----------|----------|------|
+| `ecommerce-sg-alb` | Vous (section 3.1) | ALB public → accepte internet |
+| `ecommerce-sg-frontend` | Vous (section 3.2) | Instances frontend → accepte depuis ALB public |
+| `ecommerce-sg-rds` | Vous (section 3.3) | RDS → accepte depuis nœuds EKS |
+| `ecommerce-sg-eks-nodes` | AWS EKS Auto Mode | Nœuds EKS réels → géré automatiquement |
+| `ecommerce-sg-alb-interne-backend` | AWS LBC (Helm) | ALB interne EKS backend → géré automatiquement |
+| `ecommerce-sg-alb-interne-ingress` | AWS LBC (Helm) | ALB interne EKS ingress → géré automatiquement |
+
+> ℹ️ Les 4 derniers SGs sont créés **automatiquement** par AWS. Vous ne les créez pas — vous les retrouvez dans la console après les étapes 7 et 7.5. Des règles supplémentaires sont ajoutées manuellement en section 7.6.
+
 **Navigation :** VPC → **Security groups** (menu de gauche) → **Create security group**
 
 ### 3.1 SG - ALB public (internet → load balancer)
@@ -206,33 +219,7 @@ Cliquer **Create security group**
 
 ---
 
-### 3.3 SG - EKS (frontend → microservices)
-
-**Create security group :**
-
-| Champ | Valeur |
-|-------|--------|
-| Security group name | `ecommerce-sg-eks` |
-| Description | `EKS nodes - ports microservices` |
-| VPC | `ecommerce-vpc` |
-
-**Inbound rules - 5 règles à ajouter :**
-
-| Type | Protocol | Port range | Source |
-|------|----------|-----------|--------|
-| Custom TCP | TCP | `3001` | `ecommerce-sg-frontend` |
-| Custom TCP | TCP | `3002` | `ecommerce-sg-frontend` |
-| Custom TCP | TCP | `3003` | `ecommerce-sg-frontend` |
-| Custom TCP | TCP | `3004` | `ecommerce-sg-frontend` |
-| All traffic | All | All | `ecommerce-sg-eks` ← **le SG lui-même** (communication intra-cluster) |
-
-> 💡 La règle "self" permet aux pods Kubernetes de communiquer entre eux sans restriction.
-
-Cliquer **Create security group**
-
----
-
-### 3.4 SG - RDS (EKS → base de données)
+### 3.3 SG - RDS (EKS → base de données)
 
 **Create security group :**
 
@@ -244,9 +231,11 @@ Cliquer **Create security group**
 
 **Inbound rules :**
 
-| Type | Protocol | Port | Source |
-|------|----------|------|--------|
-| MySQL | TCP | `3306` | `ecommerce-sg-eks` |
+| Type | Protocol | Port | Source | Description |
+|------|----------|------|--------|-------------|
+| MySQL/Aurora | TCP | `3306` | `ecommerce-sg-eks-nodes` | Nœuds EKS Auto Mode |
+
+> ℹ️ Ce SG (`ecommerce-sg-eks-nodes`) est créé automatiquement par AWS à la création du cluster EKS. Créez le SG RDS maintenant et ajoutez cette règle en section 7.6 après la création du cluster.
 
 Cliquer **Create security group**
 
@@ -383,7 +372,7 @@ Pour importer `ecommerce_db.sql`, vous avez besoin d'un accès réseau à la bas
 1. **Lancer une EC2 `t3.micro` dans un subnet public**
    - Navigation : EC2 → Launch instances
    - AMI : Amazon Linux 2
-   - Security Group : `ecommerce-sg-eks`
+   - Security Group : `ecommerce-sg-frontend`
    - Attendre le statut "Running"
 
 2. **Télécharger le bundle SSL RDS**
@@ -593,7 +582,7 @@ EKS crée et gère le control plane Kubernetes. EKS Auto Mode gère les worker n
 |-------|--------|
 | VPC | `ecommerce-vpc` |
 | Subnets | Sélectionner les **3 subnets EKS privés** (1 par AZ) |
-| Security groups | `ecommerce-sg-eks` |
+| Security groups | Laisser vide (EKS Auto Mode gère ses propres SGs) |
 | Cluster endpoint access | **Public and private** |
 
 **Step 3 - Configure observability :** Laisser par défaut
@@ -759,27 +748,41 @@ kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-cont
 
 ---
 
-### 7.6 Configurer le Security Group RDS pour EKS
+### 7.6 Configurer les Security Groups post-EKS
 
-> ℹ️ Les nœuds EKS Auto Mode ont leur propre Security Group créé automatiquement par AWS (différent de `ecommerce-sg-eks`). Il faut l'autoriser à accéder au port 3306 de RDS.
+Après création du cluster EKS et déploiement du AWS Load Balancer Controller, deux SGs sont créés automatiquement par AWS et nécessitent des règles supplémentaires.
 
-**Étape 1 — Identifier le Security Group des nœuds EKS :**
+> ℹ️ Identifier les SGs : EC2 → **Security Groups** → filtrer par nom de tag : `ecommerce-sg-eks-nodes` et `ecommerce-sg-alb-interne-backend`
 
-EC2 → **Instances** → cliquer sur un nœud EKS (nom commence par `i-`) → onglet **Security** → noter le **Security Group ID** (ex: `sg-0xxxxxxxxxxxxxxxxx`)
+---
 
-**Étape 2 — Ajouter la règle au Security Group RDS :**
+#### A. Autoriser les nœuds EKS à accéder à RDS
 
-EC2 → **Security Groups** → chercher le SG attaché à RDS (visible dans RDS → `ecommerce-mysql` → onglet **Connectivity & security** → **VPC security groups**)
-
-Cliquer sur ce SG → onglet **Inbound rules** → **Edit inbound rules** → **Add rule** :
+EC2 → **Security Groups** → `ecommerce-sg-rds` → **Inbound rules** → **Edit inbound rules** → **Add rule** :
 
 | Champ | Valeur |
 |-------|--------|
 | Type | `MySQL/Aurora` |
-| Protocol | TCP |
-| Port range | `3306` |
-| Source | `Custom` → sélectionner le SG des nœuds EKS |
+| Port | `3306` |
+| Source | `ecommerce-sg-eks-nodes` (SG auto EKS) |
 | Description | `EKS Auto Mode nodes` |
+
+Cliquer **Save rules**
+
+---
+
+#### B. Autoriser le frontend à atteindre l'ALB interne EKS
+
+L'ALB interne EKS (`ecommerce-sg-alb-interne-backend`) doit accepter le trafic venant des instances frontend.
+
+EC2 → **Security Groups** → `ecommerce-sg-alb-interne-backend` → **Inbound rules** → **Edit inbound rules** → **Add rule** :
+
+| Champ | Valeur |
+|-------|--------|
+| Type | `HTTP` |
+| Port | `80` |
+| Source | `ecommerce-sg-frontend` |
+| Description | `Frontend vers ALB interne EKS` |
 
 Cliquer **Save rules**
 
@@ -977,15 +980,15 @@ Si **unhealthy** → vérifier que le SG Frontend autorise le port 80 depuis le 
 
 ---
 
-## 9. Frontend Option A - EC2 + Auto Scaling
+## 9. Frontend Option A - EC2
 
-Cette option déploie le frontend React (build statique) servi par **NGINX directement sur EC2**, sans Docker. L'Auto Scaling Group assure la haute disponibilité.
+Cette option déploie le frontend React (build statique) servi par **NGINX directement sur EC2**, sans Docker, sans Auto Scaling.
 
-> 💡 **Indicateur visuel portfolio** : La variable `VITE_DEPLOY_PLATFORM=ec2` affiche un badge **"☁️ EC2 + ASG"** dans la navbar du site.
+> 💡 **Indicateur visuel portfolio** : La variable `VITE_DEPLOY_PLATFORM=ec2` affiche un badge **"☁️ EC2"** dans la navbar du site.
 
 ---
 
-### 8.1 Créer un rôle IAM pour les instances EC2
+### 9.1 Créer un rôle IAM pour l'instance EC2
 
 **Navigation :** IAM → **Roles** → **Create role**
 
@@ -994,75 +997,61 @@ Cette option déploie le frontend React (build statique) servi par **NGINX direc
 | Trusted entity type | **AWS service** |
 | Use case | **EC2** |
 
-Cliquer **Next** → Rechercher et ajouter ces policies :
+Cliquer **Next** → ajouter :
 - `AmazonSSMManagedInstanceCore` ← accès Session Manager (sans clé SSH)
 
 **Role name :** `ecommerce-frontend-ec2-role` → **Create role**
 
 ---
 
-### 8.2 Créer le Launch Template
+### 9.2 Lancer l'instance EC2
 
-**Navigation :** EC2 → **Launch Templates** → **Create launch template**
+**Navigation :** EC2 → **Instances** → **Launch instances**
 
 | Champ | Valeur |
 |-------|--------|
-| Launch template name | `ecommerce-frontend-lt` |
-| Template version description | `v1 - NGINX + React direct` |
+| Name | `ecommerce-frontend-ec2` |
+| AMI | **Amazon Linux 2023** |
+| Instance type | `t3.micro` |
+| Key pair | **Proceed without a key pair** |
+| VPC | `ecommerce-vpc` |
+| Subnet | Un subnet **public** (ex. `ecommerce-pub-a`) |
+| Auto-assign public IP | **Enable** |
+| Security group | `ecommerce-sg-frontend` |
+| IAM instance profile | `ecommerce-frontend-ec2-role` |
 
-**Application and OS Images :**
-- **Quick Start** → **Amazon Linux 2023 AMI** → `x86_64`
-
-**Instance type :** `t3.micro` (Free Tier) ou `t3.small`
-
-**Key pair :** Aucune (on utilisera Session Manager)
-
-**Network settings :**
-- Security groups : `ecommerce-sg-frontend`
-
-**Advanced details :**
-- IAM instance profile : `ecommerce-frontend-ec2-role`
-- User data : coller le script suivant
+**Advanced details → User data :**
 
 ```bash
 #!/bin/bash
-# Variables — ALB interne EKS (récupéré à l'étape 7.8)
-# Format : internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com
+# ALB interne EKS (récupéré à l'étape 7.8)
 ALB_URL="http://internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com"
 
-# Mise à jour système + outils
 dnf update -y
 dnf install -y nginx git nodejs npm
 
-# Cloner le frontend
 cd /opt
 git clone https://github.com/yaraportfolio/ecommerce-frontend.git
 cd ecommerce-frontend
 
-# Build React avec la plateforme EC2 + URL backend
 cat > .env.production << EOF
 VITE_DEPLOY_PLATFORM=ec2
 EOF
 
 npm ci
 npm run build
-
-# Copier le build vers NGINX
 cp -r dist/* /usr/share/nginx/html/
 
-# Configurer NGINX (proxy backend + SPA fallback)
 cat > /etc/nginx/conf.d/ecommerce.conf << 'NGINXEOF'
 server {
     listen 80;
     root /usr/share/nginx/html;
     index index.html;
 
-    # SPA - toutes les routes vers index.html
     location / {
         try_files $uri $uri/ /index.html;
     }
 
-    # Proxy vers les microservices EKS via ALB
     location /api/ {
         proxy_pass ALB_PLACEHOLDER/api/;
         proxy_set_header Host $host;
@@ -1071,106 +1060,53 @@ server {
 }
 NGINXEOF
 
-# Remplacer le placeholder par l'URL ALB réelle
 sed -i "s|ALB_PLACEHOLDER|${ALB_URL}|g" /etc/nginx/conf.d/ecommerce.conf
-
-# Démarrer NGINX
 systemctl enable nginx
 systemctl start nginx
 ```
 
-> ⚠️ Remplacer `internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com` par l'URL réelle récupérée à l'étape 7.8 (`kubectl get ingress -n ecommerce`). L'ALB EKS est **interne** — accessible uniquement depuis les instances EC2 dans le même VPC.
+> ⚠️ Remplacer `internal-ecommerce-alb-xxxx` par l'URL réelle récupérée à l'étape 7.8.
 
-Cliquer **Create launch template**
-
----
-
-### 8.3 Créer l'Auto Scaling Group
-
-**Navigation :** EC2 → **Auto Scaling Groups** → **Create Auto Scaling group**
-
-**Step 1 - Choose launch template :**
-
-| Champ | Valeur |
-|-------|--------|
-| Auto Scaling group name | `ecommerce-frontend-asg` |
-| Launch template | `ecommerce-frontend-lt` |
-| Version | `Latest` |
-
-**Step 2 - Choose instance launch options :**
-
-| Champ | Valeur |
-|-------|--------|
-| VPC | `ecommerce-vpc` |
-| Availability Zones and subnets | Sélectionner les **3 subnets publics** |
-| Availability Zone distribution | **Balanced best effort** (défaut) ← laisser tel quel |
-
-> 💡 **Balanced best effort** : si une AZ tombe, l'ASG lance les instances dans les autres AZ disponibles. C'est le comportement le plus résilient pour ce portfolio.
-
-**Step 3 - Configure advanced options :**
-- ✅ **Attach to an existing load balancer**
-- Target groups : sélectionner `ecommerce-tg-frontend` (créé à l'étape 8)
-
-> ℹ️ Si le Target Group n'existe pas encore, cocher **No load balancer** et revenir après l'étape 8.
-
-- Health check grace period : `120` secondes
-
-**Step 4 - Configure group size and scaling :**
-
-| Champ | Valeur |
-|-------|--------|
-| Desired capacity | `2` |
-| Min desired capacity | `1` |
-| Max desired capacity | `4` |
-
-**Automatic scaling :**
-- ✅ **Target tracking scaling policy**
-- Metric type : **Average CPU utilization**
-- Target value : `70`
-
-**Step 6 - Add tags :**
-
-| Key | Value |
-|-----|-------|
-| Name | `ecommerce-frontend-ec2` |
-| Env | `prod` |
-| Platform | `ec2` |
-
-Cliquer **Create Auto Scaling group**
-
-Attendre ~3-5 minutes que les instances démarrent, que le User Data s'exécute (clone + build + NGINX), et que le health check passe.
+Cliquer **Launch instance** — attendre ~4-5 minutes le temps du build.
 
 ---
 
-### 8.4 Se connecter à l'instance EC2 (Session Manager)
+### 9.3 Attacher l'instance au Target Group
 
-> ℹ️ Pas besoin de clé SSH. Session Manager permet une connexion sécurisée directement depuis la console AWS.
+**Navigation :** EC2 → **Target Groups** → `ecommerce-tg-frontend` → onglet **Targets** → **Register targets**
 
-1. EC2 → **Instances** → sélectionner une instance `ecommerce-frontend-ec2`
-2. Cliquer **Connect** → onglet **Session Manager** → **Connect**
-3. Un terminal s'ouvre dans le navigateur
+1. Sélectionner l'instance `ecommerce-frontend-ec2`
+2. Port : `80`
+3. Cliquer **Include as pending below** → **Register pending targets**
+
+Attendre que le statut passe de `initial` → `healthy` (~3-5 min).
+
+---
+
+### 9.4 Se connecter à l'instance (Session Manager)
+
+**Navigation :** EC2 → **Instances** → `ecommerce-frontend-ec2` → **Connect** → **Session Manager**
 
 ```bash
 # Vérifier que NGINX tourne
 sudo systemctl status nginx
 
-# Vérifier que le build React est présent
+# Vérifier le build React
 ls /usr/share/nginx/html/
 
-# Voir les logs NGINX
-sudo tail -f /var/log/nginx/access.log
-
-# Tester le proxy backend (ALB interne EKS)
+# Tester le proxy backend
 curl http://localhost/api/auth/health
 # → {"status":"ok","database":"connected"}
+
+# Logs boot (user data)
+sudo cat /var/log/cloud-init-output.log | tail -50
 ```
 
-**Pour mettre à jour le frontend manuellement :**
+**Mettre à jour le frontend :**
 ```bash
 cd /opt/ecommerce-frontend
 sudo git pull
-sudo npm ci
-sudo npm run build
+sudo npm ci && sudo npm run build
 sudo cp -r dist/* /usr/share/nginx/html/
 sudo systemctl reload nginx
 ```
