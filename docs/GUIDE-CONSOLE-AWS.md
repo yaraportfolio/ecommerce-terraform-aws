@@ -1115,9 +1115,51 @@ sudo systemctl reload nginx
 
 ## 10. Frontend Option B - Elastic Beanstalk
 
-Beanstalk gère tout automatiquement : EC2, ALB, autoscaling. Idéal pour comprendre le modèle PaaS.
+Beanstalk gère tout automatiquement : EC2, ALB, autoscaling. Idéal pour comprendre le modèle PaaS. Il utilise l'image Docker du frontend hébergée sur ECR.
 
 > 💡 **Indicateur visuel portfolio** : La variable `VITE_DEPLOY_PLATFORM=beanstalk` affiche un badge **"☁️ Elastic Beanstalk"** dans la navbar du site.
+
+---
+
+### 10.0 Prérequis — Builder et pousser l'image frontend vers ECR
+
+> ℹ️ Contrairement à l'Option A (build direct sur EC2), Beanstalk utilise une **image Docker** hébergée sur ECR. Cette étape est obligatoire avant de créer l'environnement Beanstalk.
+
+#### Créer le repository ECR
+
+**Navigation :** ECR → **Create repository**
+
+| Champ | Valeur |
+|-------|--------|
+| Visibility | **Private** |
+| Repository name | `ecommerce/frontend` |
+
+Cliquer **Create repository** → noter l'URI (format : `ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/frontend`)
+
+#### Builder et pousser l'image (depuis votre machine locale)
+
+```bash
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ECR_URI="${ACCOUNT_ID}.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/frontend"
+
+# Login ECR
+aws ecr get-login-password --region eu-west-1 | \
+  docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.eu-west-1.amazonaws.com
+
+# Builder l'image avec la variable de plateforme
+cd /chemin/vers/ecommerce-frontend
+docker build \
+  --build-arg VITE_DEPLOY_PLATFORM=beanstalk \
+  -f docker/Dockerfile \
+  -t ${ECR_URI}:latest .
+
+# Pousser vers ECR
+docker push ${ECR_URI}:latest
+```
+
+> ✅ Vérification : ECR → `ecommerce/frontend` → vous devez voir l'image avec le tag `latest`.
+
+---
 
 **Navigation :** Barre de recherche → `Elastic Beanstalk` → **Elastic Beanstalk**
 
@@ -1144,18 +1186,22 @@ Créer ce fichier sur votre machine et l'uploader :
 {
   "AWSEBDockerrunVersion": "1",
   "Image": {
-    "Name": "VOTRE_ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/frontend:latest",
+    "Name": "ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/frontend:latest",
     "Update": "true"
   },
   "Ports": [
     { "ContainerPort": "80" }
   ],
   "Environment": [
-    { "Name": "BACKEND_URL", "Value": "http://INTERNAL_ALB_DNS" },
-    { "Name": "BACKEND_HOST", "Value": "api.ecommerce.local" }
+    { "Name": "BACKEND_URL", "Value": "http://internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com" },
+    { "Name": "BACKEND_HOST", "Value": "ecommerce.ngoni.app" }
   ]
 }
 ```
+
+> ⚠️ Remplacer `ACCOUNT_ID` par votre Account ID AWS et `internal-ecommerce-alb-xxxx` par l'URL réelle de l'ALB interne EKS (étape 7.8).
+
+> ℹ️ Le badge `VITE_DEPLOY_PLATFORM=beanstalk` a été intégré au build lors du `docker build --build-arg` à l'étape 10.0.
 
 **Step 2 - Configure service access :**
 - Service role : **Create and use new service role**
