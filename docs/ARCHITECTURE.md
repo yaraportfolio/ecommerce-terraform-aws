@@ -321,16 +321,33 @@ Le frontend est identique dans les trois cas : une image Docker `nginx:stable-al
 
 ### Option A - EC2 + Auto Scaling Group
 
-**Principe :** Des VMs EC2 classiques. Au démarrage de chaque VM, le User Data script installe Docker, se connecte à ECR, et lance le conteneur frontend.
+**Principe :** Des VMs EC2 classiques. Au démarrage de chaque VM, le User Data script installe NGINX + Node.js, clone le repository frontend, build le projet React directement sur la machine, et copie les fichiers statiques dans le répertoire NGINX. Pas de Docker — le frontend tourne nativement.
 
 **Composants :**
-- **Launch Template** : définit l'AMI (Amazon Linux 2023), le type d'instance (`t3.medium`), le Security Group, le rôle IAM, et le script User Data
-- **Auto Scaling Group (ASG)** : maintient entre 2 et 6 instances selon la charge CPU. Déploiement sur les 3 subnets publics (multi-AZ). Intégration avec l'ALB via le Target Group
+- **Launch Template** : définit l'AMI (Amazon Linux 2023), le type d'instance (`t3.micro`), le Security Group, le rôle IAM (`AmazonSSMManagedInstanceCore`), et le script User Data
+- **Auto Scaling Group (ASG)** : maintient entre 1 et 4 instances selon la charge CPU. Déploiement sur les 3 subnets publics (multi-AZ). Intégration avec l'ALB via le Target Group
 - **Target Group** : health check sur `GET /` toutes les 30 secondes. Les instances unhealthy sont déregistrées de l'ALB et remplacées par l'ASG
+- **NGINX** : sert les fichiers statiques du build React (`dist/`) et proxifie `/api/*` vers l'ALB interne EKS
 
-**Avantages :** contrôle total sur la VM (debugging, accès SSH via SSM), familiarité pour les équipes Ops, coût prévisible (instances On-Demand)
+**User Data (résumé) :**
+```bash
+dnf install -y nginx git nodejs npm
+git clone https://github.com/yaraportfolio/ecommerce-frontend.git
+cd ecommerce-frontend
+echo "VITE_DEPLOY_PLATFORM=ec2" > .env.production
+npm ci && npm run build
+cp -r dist/* /usr/share/nginx/html/
+# Config NGINX avec proxy /api/ → ALB EKS
+systemctl enable --now nginx
+```
 
-**Inconvénients :** temps de démarrage (~2-3 minutes au scale-out), gestion du système d'exploitation (patches), pas de "scale to zero"
+**Accès aux instances :** via AWS Systems Manager Session Manager uniquement. Aucun port SSH (22) exposé, aucune clé SSH requise.
+
+**Variable d'environnement :** `VITE_DEPLOY_PLATFORM=ec2` injectée au build — affiche le badge **"☁️ EC2 + ASG"** dans la navbar.
+
+**Avantages :** contrôle total sur la VM, debugging via SSM Session Manager, coût prévisible, pas de runtime Docker à maintenir
+
+**Inconvénients :** temps de démarrage plus long (~3-5 minutes au scale-out car build inclus), gestion des patches système d'exploitation, pas de "scale to zero"
 
 **Cas d'usage :** production avec charge prévisible, équipes qui veulent comprendre la couche infra avant d'abstraire
 
@@ -386,8 +403,9 @@ Le frontend est identique dans les trois cas : une image Docker `nginx:stable-al
 
 | Critère | EC2 ASG | Beanstalk | ECS Fargate |
 |---------|---------|-----------|-------------|
-| Temps de déploiement | ~5min | ~5min | ~2min |
-| Scale-out | ~3min | ~3min | ~30s |
+| Runtime | NGINX natif (no Docker) | Docker (ECR) | Docker (ECR) |
+| Temps de déploiement | ~5min (build inclus) | ~5min | ~2min |
+| Scale-out | ~4-5min (clone+build) | ~3min | ~30s |
 | Scale to zero | Non | Non | Oui |
 | Contrôle infra | Total | Partiel | Minimal |
 | Debugging | SSH/SSM | SSM/EB logs | ECS Exec |
@@ -760,13 +778,16 @@ ECR (Elastic Container Registry) héberge les images Docker dans AWS. Les images
 
 ### Repositories créés
 
-| Repository | Image source | Tag |
-|-----------|-------------|-----|
-| ecommerce/auth-service | ghcr.io/yaraportfolio/auth-service | v3.3 → migré |
-| ecommerce/product-service | ghcr.io/yaraportfolio/product-service | v3.3 → migré |
-| ecommerce/order-service | ghcr.io/yaraportfolio/order-service | v3.3 → migré |
-| ecommerce/review-service | ghcr.io/yaraportfolio/review-service | v3.3 → migré |
-| ecommerce/frontend | build local | latest |
+| Repository | Image source | Tag | Utilisé par |
+|-----------|-------------|-----|-------------|
+| ecommerce/auth-service | ghcr.io/yaraportfolio/auth-service | latest | EKS (GHCR public, pas ECR) |
+| ecommerce/product-service | ghcr.io/yaraportfolio/product-service | latest | EKS (GHCR public, pas ECR) |
+| ecommerce/order-service | ghcr.io/yaraportfolio/order-service | latest | EKS (GHCR public, pas ECR) |
+| ecommerce/review-service | ghcr.io/yaraportfolio/review-service | latest | EKS (GHCR public, pas ECR) |
+| ecommerce/frontend | build local | latest | Option B (Beanstalk) + Option C (ECS) |
+
+> ℹ️ **Option A (EC2)** ne nécessite pas d'image ECR — le build React est fait directement sur la VM via `npm run build`.  
+> Les microservices restent sur **GHCR** (public, GitHub-natif) et ne sont pas migrés vers ECR.
 
 ### Politique de lifecycle
 
@@ -817,7 +838,8 @@ Policy : `AmazonEKSClusterPolicy`
 Policies : `AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOnly`
 
 **`ecommerce-frontend-ec2-role`** - rôle des instances frontend EC2  
-Policies : `AmazonEC2ContainerRegistryReadOnly`, `AmazonSSMManagedInstanceCore`
+Policies : `AmazonSSMManagedInstanceCore`  
+Note : pas d'accès ECR requis — le frontend est buildé directement depuis GitHub (clone + npm build), pas depuis une image Docker.
 
 **`AmazonEKSLoadBalancerControllerRole`** - rôle du AWS Load Balancer Controller  
 Policy custom : `AWSLoadBalancerControllerIAMPolicy` (permet de créer/modifier/supprimer des ALB et Target Groups)

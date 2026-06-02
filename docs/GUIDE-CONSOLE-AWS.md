@@ -91,23 +91,29 @@ Le VPC est le réseau privé virtuel qui isole toute votre infrastructure. Pense
 
 ### 2.2 Ajouter les tags Kubernetes sur les subnets
 
-EKS a besoin de tags spécifiques sur les subnets pour créer automatiquement des Load Balancers.
+EKS et l'AWS Load Balancer Controller ont besoin de tags spécifiques sur les subnets pour savoir où créer les ALB.
 
 **Navigation :** VPC → **Subnets** (menu de gauche)
 
 **Pour chaque subnet public (3 subnets avec "public" dans le nom) :**
-1. Cocher le subnet
-2. Onglet **Tags** en bas de page
-3. Cliquer **Manage tags**
-4. Cliquer **Add new tag**
-5. Ajouter : Clé = `kubernetes.io/role/elb` | Valeur = `1`
-6. Cliquer **Save**
+
+Cliquer le subnet → onglet **Tags** → **Manage tags** → **Add new tag** :
+
+| Clé | Valeur | Rôle |
+|-----|--------|------|
+| `kubernetes.io/role/elb` | `1` | ALB public (internet-facing) |
+| `kubernetes.io/cluster/ecommerce-cluster` | `shared` | Découverte par le LBC |
 
 **Pour chaque subnet privé (3 subnets avec "private" dans le nom) :**
-1. Même procédure
-2. Ajouter : Clé = `kubernetes.io/role/internal-elb` | Valeur = `1`
 
-> 💡 Ces tags permettent à EKS de savoir dans quels subnets créer les ALB internes (privés) et externes (publics) automatiquement.
+| Clé | Valeur | Rôle |
+|-----|--------|------|
+| `kubernetes.io/role/internal-elb` | `1` | ALB interne (EKS microservices) |
+| `kubernetes.io/cluster/ecommerce-cluster` | `shared` | Découverte par le LBC |
+
+> ⚠️ **Le tag `kubernetes.io/cluster/ecommerce-cluster=shared` est obligatoire sur les subnets privés.** Sans lui, l'AWS Load Balancer Controller ne peut pas découvrir les subnets et l'ALB interne EKS ne se crée pas (`unable to resolve at least one subnet`).
+
+> 💡 Ces tags permettent à EKS de savoir dans quels subnets créer les ALB internes (privés, pour les microservices) et externes (publics, pour le frontend).
 
 ### 2.3 Créer les subnets pour la base de données
 
@@ -845,24 +851,39 @@ helm install ecommerce-microservices . \
 kubectl get pods -n ecommerce
 # → 4 pods avec READY 1/1
 
-# Récupérer l'URL de l'ALB (peut prendre 2-3 minutes)
+# Récupérer l'URL de l'ALB interne (peut prendre 2-3 minutes)
 kubectl get ingress -n ecommerce
 # → COLONNE ADDRESS affiche le DNS de l'ALB
+# → Format : internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com
+#   (le préfixe "internal-" confirme que l'ALB est privé ✅)
+```
 
-# Tester les endpoints
+> ℹ️ **L'ALB EKS est interne (privé)** — il n'est accessible que depuis l'intérieur du VPC. Il est inaccessible depuis internet, ce qui est le comportement attendu. Les microservices sont joints uniquement par le frontend (EC2/Beanstalk/ECS) via cet ALB interne.
+
+> Pour tester depuis votre machine : utiliser un pod de debug dans le cluster.
+
+```bash
+# Test depuis l'intérieur du cluster
 ALB=$(kubectl get ingress api-ingress -n ecommerce \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
-curl http://$ALB/api/auth/health
+kubectl run -it --rm debug --image=curlimages/curl --restart=Never -n ecommerce \
+  -- curl -s http://$ALB/api/auth/health
 # → {"status":"ok","database":"connected"}
 
-curl http://$ALB/api/products
-# → Liste des produits JSON
+kubectl run -it --rm debug --image=curlimages/curl --restart=Never -n ecommerce \
+  -- curl -s http://$ALB/api/products | head -c 200
+# → Début de la liste des produits JSON
 ```
 
 **Vérifier dans la console AWS :**
-- EC2 → **Load Balancers** → `ecommerce-alb` → statut **Active**
+- EC2 → **Load Balancers** → `ecommerce-alb` → statut **Active** → Scheme : **internal** ✅
 - EKS → `ecommerce-cluster` → **Resources** → **Pods** → Namespace `ecommerce` → 4 pods Running
+
+**Noter l'URL de l'ALB interne** — elle sera utilisée dans la config NGINX du frontend (sections 8, 9, 10) :
+```
+internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com
+```
 
 ---
 
@@ -915,8 +936,9 @@ Cliquer **Next** → Rechercher et ajouter ces policies :
 
 ```bash
 #!/bin/bash
-# Variables — adapter l'URL ALB EKS
-ALB_URL="http://ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com"
+# Variables — ALB interne EKS (récupéré à l'étape 7.8)
+# Format : internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com
+ALB_URL="http://internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com"
 
 # Mise à jour système + outils
 dnf update -y
@@ -967,7 +989,7 @@ systemctl enable nginx
 systemctl start nginx
 ```
 
-> ⚠️ Remplacer `ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com` par l'URL réelle de votre ALB EKS (visible dans EC2 → Load Balancers ou `kubectl get ingress -n ecommerce`).
+> ⚠️ Remplacer `internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com` par l'URL réelle récupérée à l'étape 7.8 (`kubectl get ingress -n ecommerce`). L'ALB EKS est **interne** — accessible uniquement depuis les instances EC2 dans le même VPC.
 
 Cliquer **Create launch template**
 
