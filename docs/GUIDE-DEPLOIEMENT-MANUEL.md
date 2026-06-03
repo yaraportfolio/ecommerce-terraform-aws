@@ -1,7 +1,11 @@
 # Guide de Déploiement Manuel AWS - E-Commerce Microservices
 **Auteur :** Yara Mahi Mohamed  
-**Stack :** React 18 + NGINX | Node.js 20 microservices | MariaDB → RDS MySQL | EKS + Helm  
-**Objectif :** Déployer manuellement pour comprendre chaque couche avant d'automatiser avec Terraform
+**Stack :** React 18 + NGINX | Node.js 20 microservices | RDS MySQL 8.0 | EKS Auto Mode + Helm  
+**Objectif :** Déployer en ligne de commande (`aws`, `kubectl`, `helm`) pour comprendre chaque couche
+
+> 📖 **Voir aussi** : [Architecture détaillée](./ARCHITECTURE.md) · [Guide Console AWS (interface web)](./GUIDE-CONSOLE-AWS.md) · [Terraform](../terraform/)
+>
+> ℹ️ La base est **RDS MySQL 8.0** (compatible MariaDB 10.11), le DNS est sur **Cloudflare**, et CloudFront est **optionnel**.
 
 ---
 
@@ -337,7 +341,7 @@ echo "SG EKS : $SG_EKS"
 ```bash
 SG_RDS=$(aws ec2 create-security-group \
   --group-name "$PROJECT-sg-rds" \
-  --description "RDS Aurora - MySQL depuis EKS uniquement" \
+  --description "RDS MySQL depuis EKS uniquement" \
   --vpc-id $VPC_ID \
   --tag-specifications "ResourceType=security-group,Tags=[{Key=Name,Value=$PROJECT-sg-rds}]" \
   --query 'GroupId' --output text)
@@ -372,7 +376,7 @@ echo "Secret DB créé dans Secrets Manager"
 ```bash
 aws rds create-db-subnet-group \
   --db-subnet-group-name "$PROJECT-db-subnet-group" \
-  --db-subnet-group-description "Subnets pour RDS Aurora $PROJECT" \
+  --db-subnet-group-description "Subnets pour RDS MySQL $PROJECT" \
   --subnet-ids $SUBNET_DB_A $SUBNET_DB_B \
   --tags Key=Name,Value=$PROJECT-db-subnet-group
 
@@ -1067,9 +1071,11 @@ echo "✅ ALB configuré : https://$ALB_DNS"
 
 ---
 
-## 12. CloudFront + Route 53
+## 12. CloudFront + DNS (optionnel)
 
-CloudFront met le frontend en cache globalement. Route 53 pointe votre domaine vers CloudFront.
+> ℹ️ **Étape optionnelle — non déployée dans ce portfolio.** Le DNS est géré par Cloudflare (CNAME → ALB public). CloudFront ajouterait un CDN + WAF devant l'ALB. Documenté ici pour référence.
+
+CloudFront met le frontend en cache globalement. Le DNS pointe votre domaine vers CloudFront (ou directement vers l'ALB public sans CloudFront).
 
 ### Distribution CloudFront
 
@@ -1332,7 +1338,7 @@ aws cloudwatch put-metric-alarm \
   --dimensions Name=LoadBalancer,Value=$ALB_ARN_SUFFIX \
   --alarm-description "Trop d'erreurs 5xx sur l'ALB"
 
-# Alarme : CPU Aurora trop élevé
+# Alarme : CPU RDS trop élevé
 aws cloudwatch put-metric-alarm \
   --alarm-name "$PROJECT-rds-cpu-high" \
   --comparison-operator GreaterThanThreshold \
@@ -1434,3 +1440,7 @@ INTERNAL_ALB=$(kubectl get ingress -n ecommerce \
   -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}')
 echo "ALB interne EKS : $INTERNAL_ALB"
 ```
+
+---
+
+*Ce guide CLI complète le [Guide Console AWS](./GUIDE-CONSOLE-AWS.md), l'[Architecture détaillée](./ARCHITECTURE.md) et le [Terraform](../terraform/). Les approches déploient la même architecture.*

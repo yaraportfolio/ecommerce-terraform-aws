@@ -1,236 +1,177 @@
-# AWS E-Commerce - Infrastructure as Code
-**Auteur :** Yara Mahi Mohamed | Portfolio DevOps & SRE  
-**Stack :** React 18 + NGINX | Node.js 20 microservices | RDS Aurora MySQL | EKS + Helm
+# ☁️ AWS E-Commerce — Infrastructure & Déploiement Multi-Plateforme
+
+![AWS](https://img.shields.io/badge/AWS-EKS_·_RDS_·_ECR-FF9900?logo=amazonaws&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-Auto_Mode-326CE5?logo=kubernetes&logoColor=white)
+![Helm](https://img.shields.io/badge/Helm-3.x-0F1689?logo=helm&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-IaC-7B42BC?logo=terraform&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-ECR-2496ED?logo=docker&logoColor=white)
+
+> **Auteur :** Yara Mahi Mohamed — Portfolio DevOps & SRE
+> **Stack :** React 18 + NGINX · Node.js 20 (4 microservices) · RDS MySQL 8.0 · EKS Auto Mode + Helm
+> **Région :** `eu-west-1` (Irlande) · **Domaine :** [ecommerce.ngoni.app](https://ecommerce.ngoni.app)
+
+Déploiement d'une plateforme e-commerce microservices sur AWS, avec le **frontend déployé de 3 façons différentes** (EC2, Elastic Beanstalk, ECS Fargate) pour illustrer la progression IaaS → PaaS → Serverless. Un badge dynamique dans la navbar indique en temps réel sur quelle plateforme tourne l'instance servie.
 
 ---
 
-## Vue d'ensemble
-
-Ce projet déploie l'architecture e-commerce complète sur AWS en deux phases :
-
-1. **Phase 1 - Déploiement manuel** : comprendre chaque service AWS avant d'automatiser
-2. **Phase 2 - Terraform** : infrastructure as code modulaire et reproductible
-
-### Architecture déployée
+## 🗺️ Architecture
 
 ```
-Internet → Route 53 → CloudFront → ALB public (HTTPS)
-                                        │
-                    ┌───────────────────┼──────────────────┐
-                    │                   │                  │
-               EC2 + ASG       Elastic Beanstalk    ECS Fargate
-               (Option A)        (Option B)          (Option C)
-                    └───────────────────┼──────────────────┘
-                                        │ HTTP
-                              ALB interne EKS
-                                        │
-                    ┌───────────────────┼──────────────────┐
-                    │                   │                  │
-              auth-service      product-service      order-service
-               :3001             :3002                :3003
-                    │                                      │
-              review-service                      [HPA 2-8 pods]
-               :3004
-                    └──────────────────┬───────────────────┘
-                                       │ MySQL :3306
-                              RDS Aurora MySQL
-                           (compatible MariaDB 10.11)
+Internet → Cloudflare DNS (ecommerce.ngoni.app)
+                  │ HTTPS
+        ┌─────────▼──────────┐
+        │  ALB public (443)  │  ecommerce-alb-pub
+        └─────────┬──────────┘
+      stickiness  │  forward pondéré
+        ┌─────────┼──────────────────┐
+        ▼         ▼                  ▼
+   EC2 (NGINX)  Beanstalk        ECS Fargate
+   Option A     Option B          Option C
+   badge EC2    badge Beanstalk   badge ECS
+        └─────────┼──────────────────┘
+                  │ /api/* (proxy NGINX)
+        ┌─────────▼──────────┐
+        │ ALB interne EKS    │  internal-ecommerce-alb (privé)
+        └─────────┬──────────┘
+   ┌──────┬───────┼────────┬─────────┐
+   ▼      ▼       ▼        ▼
+ auth  product  order   review        (EKS Auto Mode + Helm + HPA)
+ :3001  :3002   :3003   :3004
+   └──────┴───────┼────────┴─────────┘
+                  │ MySQL :3306
+        ┌─────────▼──────────┐
+        │  RDS MySQL 8.0     │  ecommerce-mysql
+        └────────────────────┘
 ```
+
+> 📐 Architecture détaillée, décisions techniques et correspondances OCI→AWS : **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**
+
+<!-- L'image ci-dessous s'affichera dès que img/architecture.png sera ajouté -->
+![Architecture AWS](./img/architecture.png)
 
 ---
 
-## Structure du projet
+## 📸 Galerie
 
-```
-aws-ecommerce/
-├── README.md                          # Ce fichier
-├── docs/
-│   └── GUIDE-DEPLOIEMENT-MANUEL.md   # Phase 1 - déploiement pas à pas
-└── terraform/
-    ├── environments/
-    │   └── prod/
-    │       ├── main.tf               # Point d'entrée - assemble tous les modules
-    │       ├── variables.tf          # Déclaration des variables
-    │       ├── terraform.tfvars      # Valeurs (sans secrets)
-    │       └── outputs.tf            # Sorties (ALB DNS, ECR URLs, etc.)
-    └── modules/
-        ├── vpc/                      # VPC, subnets, NAT GW, route tables
-        ├── sg/                       # Security Groups (ALB, frontend, EKS, RDS)
-        ├── rds/                      # Aurora MySQL + Secrets Manager
-        ├── ecr/                      # Repositories Docker (5 services)
-        ├── eks/                      # Cluster EKS + node group
-        ├── alb/                      # ALB public + Target Group + Listeners
-        ├── frontend-ec2/             # Launch Template + ASG (Option A)
-        ├── frontend-beanstalk/       # Elastic Beanstalk (Option B)
-        └── frontend-ecs/             # ECS Fargate (Option C)
-```
+> Les images apparaissent automatiquement dès que les captures sont déposées dans [`img/`](./img/).
+
+<table>
+  <tr>
+    <td align="center"><strong>Page d'accueil</strong><br><img src="./img/shop-home.png" width="380" alt="Accueil"></td>
+    <td align="center"><strong>Catalogue produits</strong><br><img src="./img/shop-products.png" width="380" alt="Produits"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Badge EC2</strong><br><img src="./img/badge-ec2.png" width="380" alt="Badge EC2"></td>
+    <td align="center"><strong>Badge Elastic Beanstalk</strong><br><img src="./img/badge-beanstalk.png" width="380" alt="Badge Beanstalk"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Badge ECS Fargate</strong><br><img src="./img/badge-ecs.png" width="380" alt="Badge ECS"></td>
+    <td align="center"><strong>Pods EKS (Lens)</strong><br><img src="./img/eks-pods.png" width="380" alt="Pods EKS"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>ALB — targets healthy</strong><br><img src="./img/alb-targets.png" width="380" alt="ALB Targets"></td>
+    <td align="center"><strong>RDS MySQL</strong><br><img src="./img/rds.png" width="380" alt="RDS"></td>
+  </tr>
+</table>
 
 ---
 
-## Phase 1 - Déploiement Manuel
+## 📚 Documentation
 
-Voir le guide complet : [`docs/GUIDE-DEPLOIEMENT-MANUEL.md`](./docs/GUIDE-DEPLOIEMENT-MANUEL.md)
-
-Le guide couvre dans l'ordre :
-1. Configuration AWS CLI et outils
-2. VPC, subnets, NAT Gateway, route tables
-3. Security Groups (ALB → Frontend → EKS → RDS)
-4. RDS Aurora (compatible MariaDB 10.11 - schéma identique)
-5. ECR - migration des images de GHCR vers AWS
-6. EKS - cluster + AWS Load Balancer Controller
-7. Helm - déploiement des 4 microservices
-8. Frontend en 3 variantes : EC2 ASG / Beanstalk / ECS Fargate
-9. ALB public + CloudFront + Route 53
-10. Vérification end-to-end
+| Guide | Description |
+|-------|-------------|
+| 📐 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Architecture détaillée, décisions techniques, flux de données, coûts |
+| 🖱️ [docs/GUIDE-CONSOLE-AWS.md](./docs/GUIDE-CONSOLE-AWS.md) | Déploiement pas à pas via la **console AWS** (interface web) |
+| ⌨️ [docs/GUIDE-DEPLOIEMENT-MANUEL.md](./docs/GUIDE-DEPLOIEMENT-MANUEL.md) | Déploiement via **CLI** (aws, kubectl, helm) |
+| 🏗️ [terraform/](./terraform/) | Infrastructure as Code (Phase 2 — Terraform modulaire) |
 
 ---
 
-## Phase 2 - Terraform
+## 🔗 Projets liés
 
-### Prérequis
+| Composant | Repository | Rôle |
+|-----------|-----------|------|
+| 🎨 Frontend React | [ecommerce-frontend](https://github.com/yaraportfolio/ecommerce-frontend) | SPA React + NGINX, badge plateforme |
+| ⎈ Helm Chart | [ecommerce-k8s-helm](https://github.com/yaraportfolio/ecommerce-k8s-helm) | Déploiement Kubernetes des microservices |
+| 🔐 Auth Service | [ecommerce-auth-service](https://github.com/yaraportfolio/ecommerce-auth-service) | Authentification JWT (`:3001`) |
+| 📦 Product Service | [ecommerce-product-service](https://github.com/yaraportfolio/ecommerce-product-service) | Catalogue produits (`:3002`) |
+| 🛒 Order Service | [ecommerce-order-service](https://github.com/yaraportfolio/ecommerce-order-service) | Gestion commandes (`:3003`) |
+| ⭐ Review Service | [ecommerce-review-service](https://github.com/yaraportfolio/ecommerce-review-service) | Avis produits (`:3004`) |
 
-```bash
-terraform version    # >= 1.6
-aws --version        # >= 2.x
-kubectl version      # >= 1.28
-helm version         # >= 3.x
-```
+---
 
-### Bootstrap du state Terraform
+## 🚀 Déploiement rapide
 
-Avant le premier `terraform apply`, créer le bucket S3 et la table DynamoDB pour le state :
+Deux approches, même architecture :
 
-```bash
-export AWS_REGION="eu-west-1"
-export PROJECT="ecommerce"
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+### Option 1 — Console AWS (recommandé pour apprendre)
 
-# Bucket state
-aws s3 mb s3://$PROJECT-terraform-state --region $AWS_REGION
-aws s3api put-bucket-versioning \
-  --bucket $PROJECT-terraform-state \
-  --versioning-configuration Status=Enabled
-aws s3api put-bucket-encryption \
-  --bucket $PROJECT-terraform-state \
-  --server-side-encryption-configuration \
-  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+Suivre **[docs/GUIDE-CONSOLE-AWS.md](./docs/GUIDE-CONSOLE-AWS.md)** — chaque étape indique le chemin exact dans la console (`Service → Sous-menu → Bouton`).
 
-# DynamoDB lock
-aws dynamodb create-table \
-  --table-name $PROJECT-terraform-lock \
-  --attribute-definitions AttributeName=LockID,AttributeType=S \
-  --key-schema AttributeName=LockID,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST
-```
+Ordre : VPC → Security Groups → RDS → Secrets Manager → ECR → EKS → ALB public → Frontend (EC2/Beanstalk/ECS) → CloudFront (optionnel).
 
-### Déploiement
+### Option 2 — Terraform (Phase 2)
 
 ```bash
 cd terraform/environments/prod
-
-# Initialiser
 terraform init
 
-# Passer les secrets via variables d'environnement (ne jamais committer)
-export TF_VAR_db_password="votre_password_db"
-export TF_VAR_jwt_secret="votre_jwt_secret_32chars_minimum"
-export TF_VAR_certificate_arn="arn:aws:acm:eu-west-1:ACCOUNT:certificate/XXXXX"
+export TF_VAR_db_password="••••••"
+export TF_VAR_jwt_secret="••••••••••••••••••••••••••••••••"
+export TF_VAR_certificate_arn="arn:aws:acm:eu-west-1:ACCOUNT:certificate/XXXX"
+export TF_VAR_frontend_mode="ec2"   # ec2 | beanstalk | ecs
 
-# Choisir le mode frontend (ec2 | beanstalk | ecs)
-export TF_VAR_frontend_mode="ec2"
-
-# Planifier
 terraform plan -out=tfplan
-
-# Appliquer (~20min pour EKS)
 terraform apply tfplan
 ```
 
-### Switcher le mode frontend
-
-Le paramètre `frontend_mode` active/désactive les trois modules frontend :
+Switcher de plateforme frontend sans tout recréer :
 
 ```bash
-# Basculer vers Elastic Beanstalk
 terraform apply -var="frontend_mode=beanstalk"
-
-# Basculer vers ECS Fargate
 terraform apply -var="frontend_mode=ecs"
-
-# Revenir à EC2 ASG
-terraform apply -var="frontend_mode=ec2"
-```
-
-### Mettre à jour les microservices
-
-```bash
-# Mettre à jour la version des images
-terraform apply -var="microservices_image_tag=v3.4"
-```
-
-### Outputs importants
-
-```bash
-terraform output alb_dns          # URL du load balancer public
-terraform output rds_endpoint     # Endpoint Aurora
-terraform output eks_cluster_name # Nom du cluster EKS
-terraform output ecr_urls         # URLs des repositories ECR
-```
-
-### Détruire l'environnement
-
-```bash
-terraform destroy
 ```
 
 ---
 
-## Variables clés
+## 🧩 Les 3 modes de déploiement frontend
 
-| Variable | Description | Défaut |
-|----------|-------------|--------|
-| `aws_region` | Région AWS | eu-west-1 |
-| `frontend_mode` | Mode frontend : `ec2`, `beanstalk`, `ecs` | ec2 |
-| `microservices_image_tag` | Tag image microservices | v3.3 |
-| `eks_node_instance_type` | Type d'instance EKS | t3.medium |
-| `rds_instance_class` | Classe instance RDS | db.t3.medium |
-| `db_password` | Mot de passe DB (sensible) | - |
-| `jwt_secret` | Secret JWT (sensible) | - |
-| `certificate_arn` | ARN certificat ACM HTTPS | - |
+| | Option A — EC2 | Option B — Beanstalk | Option C — ECS Fargate |
+|--|----------------|----------------------|------------------------|
+| **Modèle** | IaaS | PaaS | Serverless containers |
+| **Runtime** | NGINX natif (build direct) | Docker (ECR) | Docker (ECR) |
+| **Gestion OS** | Manuelle | AWS | Aucune (pas de VM) |
+| **Scale to zero** | Non | Non | Oui |
+| **Coût (stable)** | Le moins cher | = EC2 | Le plus cher |
+| **Badge navbar** | 🟠 EC2 | 🟢 Beanstalk | 🟣 ECS Fargate |
+
+Le badge est piloté par la variable **build-time** `VITE_DEPLOY_PLATFORM` (intégrée au build React).
 
 ---
 
-## Correspondances OCI → AWS
+## 🔐 Sécurité
 
-| OCI | AWS | Notes |
-|-----|-----|-------|
+- Secrets DB/JWT dans **AWS Secrets Manager** (jamais en clair, jamais committés)
+- **IRSA** (IAM Roles for Service Accounts) via OIDC — pas de credentials AWS dans les pods
+- Chaîne de **Security Groups** : Internet → ALB public → Frontend → ALB interne EKS → microservices → RDS
+- RDS isolé en subnets privés, accessible uniquement depuis les nœuds EKS
+- Chiffrement au repos (RDS) + SSL en transit
+- Accès aux instances via **SSM Session Manager** (zéro port SSH ouvert)
+
+---
+
+## 🔄 Correspondances OCI → AWS
+
+| OCI | AWS | Note |
+|-----|-----|------|
 | VCN | VPC | Régional |
-| Compartment | AWS Account / Tags | Isolation logique |
+| Compartment | Account / Tags | Isolation logique |
 | OCR | ECR | Registry Docker |
-| OKE | EKS | Kubernetes managé |
-| Autonomous DB | RDS Aurora | Compatible MariaDB |
-| Load Balancer | ALB | Application Load Balancer |
-| Security List | Security Group (stateful) | Différence : OCI = stateless par défaut |
-| NSG | Security Group | 1:1 |
+| OKE | EKS (Auto Mode) | Kubernetes managé |
+| Autonomous DB / DBCS | RDS MySQL 8.0 | Compatible MariaDB 10.11 |
+| Load Balancer | ALB | Application Load Balancer (L7) |
+| Security List / NSG | Security Group | AWS SG stateful |
 
 ---
 
-## Sécurité
-
-- Les mots de passe ne transitent jamais en clair : `TF_VAR_*` ou Vault
-- Les credentials DB sont stockés dans **AWS Secrets Manager**
-- Chiffrement au repos : RDS + ECR + state S3
-- Images ECR scannées à chaque push (Trivy intégré)
-- Security Groups en chaîne : internet → ALB → Frontend → EKS → RDS
-
----
-
-## Projets microservices
-
-| Service | Port | Image GHCR / ECR |
-|---------|------|-----------------|
-| auth-service | 3001 | `yaraportfolio/auth-service:v3.3` |
-| product-service | 3002 | `yaraportfolio/product-service:v3.3` |
-| order-service | 3003 | `yaraportfolio/order-service:v3.3` |
-| review-service | 3004 | `yaraportfolio/review-service:v3.3` |
-| frontend | 80 | Build local → ECR |
+*Portfolio DevOps & SRE — démontre VPC multi-AZ, EKS, Helm, IRSA, multi-registry (GHCR + ECR), et 3 modèles de déploiement applicatif sur AWS.*

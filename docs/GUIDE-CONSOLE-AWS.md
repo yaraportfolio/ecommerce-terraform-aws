@@ -35,11 +35,11 @@ Copiez ces valeurs dans un bloc-notes - vous en aurez besoin à chaque étape.
 5. [Secrets Manager - Stocker les credentials](#5-secrets-manager--stocker-les-credentials)
 6. [ECR - Registry Docker](#6-ecr--registry-docker)
 7. [EKS - Cluster Kubernetes](#7-eks--cluster-kubernetes)
-8. [Frontend Option A - EC2 + Auto Scaling](#8-frontend-option-a--ec2--auto-scaling)
-9. [Frontend Option B - Elastic Beanstalk](#9-frontend-option-b--elastic-beanstalk)
-10. [Frontend Option C - ECS Fargate](#10-frontend-option-c--ecs-fargate)
-11. [Application Load Balancer](#11-application-load-balancer)
-12. [CloudFront](#12-cloudfront)
+8. [Application Load Balancer](#8-application-load-balancer)
+9. [Frontend Option A - EC2](#9-frontend-option-a--ec2)
+10. [Frontend Option B - Elastic Beanstalk](#10-frontend-option-b--elastic-beanstalk)
+11. [Frontend Option C - ECS Fargate](#11-frontend-option-c--ecs-fargate)
+12. [CloudFront (optionnel)](#12-cloudfront-optionnel)
 13. [Vérification finale dans la console](#13-vérification-finale-dans-la-console)
 
 ---
@@ -88,6 +88,9 @@ Le VPC est le réseau privé virtuel qui isole toute votre infrastructure. Pense
 4. Attendre ~2 minutes que tout soit créé
 
 **Résultat :** Vous verrez apparaître dans la liste VPC un élément nommé `ecommerce-vpc`.
+
+> 📸 _Capture : VPC `ecommerce-vpc` avec ses subnets dans la console_
+![VPC ecommerce](../img/vpc.png)
 
 ### 2.2 Ajouter les tags Kubernetes sur les subnets
 
@@ -161,18 +164,31 @@ Pour chaque subnet DB (3 au total), onglet **Route table** → **Edit route tabl
 
 Les Security Groups sont des pare-feux virtuels. La règle d'or : chaque couche ne parle qu'à la couche suivante, en référençant d'autres SGs (pas des plages IP).
 
+> 📸 _Capture : liste des Security Groups du projet_
+![Security Groups](../img/security-groups.png)
+
 ### Vue d'ensemble des Security Groups
 
-| Nom (tag) | Créé par | Rôle |
-|-----------|----------|------|
-| `ecommerce-sg-alb` | Vous (section 3.1) | ALB public → accepte internet |
-| `ecommerce-sg-frontend` | Vous (section 3.2) | Instances frontend → accepte depuis ALB public |
-| `ecommerce-sg-rds` | Vous (section 3.3) | RDS → accepte depuis nœuds EKS |
-| `ecommerce-sg-eks-nodes` | AWS EKS Auto Mode | Nœuds EKS réels → géré automatiquement |
-| `ecommerce-sg-alb-interne-backend` | AWS LBC (Helm) | ALB interne EKS backend → géré automatiquement |
-| `ecommerce-sg-alb-interne-ingress` | AWS LBC (Helm) | ALB interne EKS ingress → géré automatiquement |
+**Créés manuellement (section 3) :**
 
-> ℹ️ Les 4 derniers SGs sont créés **automatiquement** par AWS. Vous ne les créez pas — vous les retrouvez dans la console après les étapes 7 et 7.5. Des règles supplémentaires sont ajoutées manuellement en section 7.6.
+| Nom (tag) | Créé en | Rôle |
+|-----------|---------|------|
+| `ecommerce-sg-alb` | section 3.1 | ALB public → accepte internet (`:80`, `:443`) |
+| `ecommerce-sg-frontend` | section 3.2 | Instances frontend (EC2/Beanstalk/ECS) → accepte `:80` depuis l'ALB public |
+| `ecommerce-sg-rds` | section 3.3 | RDS → accepte `:3306` depuis les nœuds EKS |
+
+**Créés automatiquement par AWS (à retrouver dans la console après les étapes 7+) :**
+
+| Nom (tag à ajouter) | Créé par | Rôle |
+|---------------------|----------|------|
+| `ecommerce-sg-eks-controlplane` | EKS | Control plane du cluster |
+| `ecommerce-sg-eks-nodes` | EKS Auto Mode | Nœuds EKS réels (reçoit `:3001-3004` depuis l'ALB interne) |
+| `ecommerce-sg-alb-interne-backend` | AWS LBC (Helm) | Backend de l'ALB interne EKS |
+| `ecommerce-sg-alb-interne-ingress` | AWS LBC (Helm) | Ingress de l'ALB interne EKS |
+| `ecommerce-sg-ecs-task` | ECS Express | ENI des tasks Fargate (Option C) |
+| `Ecommerce-frontend-prod` | Beanstalk | Instances de l'environnement Beanstalk (Option B) |
+
+> ℹ️ Les SGs auto-créés portent par défaut des noms cryptiques (`k8s-traffic-...`, `eks-cluster-sg-...`, `awseb-...`). **Ajoutez-leur un tag `Name`** lisible (EC2 → Security Groups → sélectionner → onglet Tags) pour vous y retrouver. Des règles supplémentaires sont ajoutées manuellement en section 7.6.
 
 **Navigation :** VPC → **Security groups** (menu de gauche) → **Create security group**
 
@@ -244,6 +260,9 @@ Cliquer **Create security group**
 ## 4. RDS MySQL - Base de données
 
 MySQL 8.0 est compatible MariaDB 10.11 - votre schéma `ecommerce_db.sql` et vos drivers `mysql2` fonctionnent sans modification.
+
+> 📸 _Capture : instance RDS `ecommerce-mysql` (statut Available)_
+![RDS MySQL](../img/rds.png)
 
 > 💡 **Pourquoi MySQL et pas Aurora ?** Aurora n'est pas gratuit sur le Free Tier. MySQL standard est parfait pour un portfolio et coûte ~$20/mois.
 
@@ -551,6 +570,9 @@ Pas besoin de les créer dans ECR (déjà disponibles publiquement sur GHCR).
 ## 7. EKS - Cluster Kubernetes
 
 EKS crée et gère le control plane Kubernetes. EKS Auto Mode gère les worker nodes automatiquement.
+
+> 📸 _Capture : pods des microservices en statut Running (console EKS ou Lens)_
+![Pods EKS](../img/eks-pods.png)
 
 ### 7.1 Créer le cluster EKS
 
@@ -894,15 +916,22 @@ internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com
 
 L'ALB est le point d'entrée unique pour le trafic internet. Il distribue vers les instances frontend. **Il doit être créé avant les options frontend (9/10/11) car elles s'y attachent.**
 
+> 📸 _Capture : liste des Target Groups — `ecommerce-tg-frontend` (Instance) + `ecs-gateway-tg` (IP) sur l'ALB public, et les 4 TG microservices (type IP, port nominal `1`) sur l'ALB interne EKS_
+![Target Groups](../img/alb-targets.png)
+
 ### 8.1 Créer le Target Group
 
 **Navigation :** EC2 → **Target Groups** (menu de gauche, section Load Balancing) → **Create target group**
+
+Ce Target Group reçoit les instances **EC2 (Option A)** et **Beanstalk (Option B)** — toutes deux en type `Instances`.
+
+> ℹ️ **ECS Fargate (Option C)** n'utilise PAS ce TG : Express Mode crée automatiquement son propre Target Group en type **IP**. On l'ajoutera au même ALB en section 11.
 
 **Basic configuration :**
 
 | Champ | Valeur |
 |-------|--------|
-| Target type | **Instances** (pour EC2/Beanstalk) ou **IP** (pour ECS Fargate) |
+| Target type | **Instances** |
 | Target group name | `ecommerce-tg-frontend` |
 | Protocol | **HTTP** |
 | Port | `80` |
@@ -959,7 +988,7 @@ Sélectionner **Application Load Balancer** → **Create**
 
 > **Obtenir un certificat ACM :**  
 > Barre de recherche → `Certificate Manager` → **Request certificate**  
-> → **Request a public certificate** → Entrer votre domaine (ex. `ecommerce.votredomaine.com`)  
+> → **Request a public certificate** → Entrer votre domaine (ex. `ecommerce.ngoni.app`)  
 > → Validation DNS → Suivre les instructions pour ajouter l'enregistrement CNAME dans votre DNS  
 > → Attendre ~5 minutes que le certificat soit émis
 
@@ -971,18 +1000,39 @@ Ex. `ecommerce-alb-pub-123456.eu-west-1.elb.amazonaws.com`
 
 ---
 
-### 8.3 Vérifier le routage
+### 8.3 Routage multi-plateforme (forward pondéré + stickiness)
+
+Pour servir les **3 options frontend derrière un seul ALB**, le listener HTTPS:443 fait un **forward pondéré** vers plusieurs Target Groups :
+
+| Target Group | Type | Sert | Poids |
+|--------------|------|------|-------|
+| `ecommerce-tg-frontend` | Instances | EC2 + Beanstalk | 2 |
+| `ecs-gateway-tg-xxxx` | IP | ECS Fargate (auto-créé, ajouté en 11) | 1 |
+
+**⚠️ Stickiness obligatoire :** chaque plateforme sert un **build React différent** (hash JS différent). Sans stickiness, un visiteur basculerait d'un build à l'autre à chaque requête → **page blanche** (`NS_ERROR_CORRUPTED_CONTENT`). La stickiness garde un visiteur sur le même Target Group.
+
+**Configurer (une fois les TG attachés) :**
+
+1. **Sur chaque Target Group** → onglet **Attributes** → **Edit** → ✅ Stickiness (LB cookie, 1 jour)
+2. **Sur la règle du listener 443** → EC2 → Load Balancers → `ecommerce-alb-pub` → Listeners → HTTPS:443 → **Edit** → ✅ **Turn on target group stickiness**
+
+> 💡 AWS l'exige : « *You must enable group stickiness on a rule if you enabled target stickiness on one of its target groups* ».
+
+### 8.4 Vérifier le routage
 
 **Navigation :** EC2 → **Target Groups** → `ecommerce-tg-frontend` → Onglet **Targets**
 
-Les instances (EC2, ECS tasks) apparaîtront ici après la création de l'option frontend choisie (sections 9/10/11). Statut attendu : **healthy**.  
-Si **unhealthy** → vérifier que le SG Frontend autorise le port 80 depuis le SG ALB.
+Les targets apparaissent après la création de l'option frontend choisie (sections 9/10/11). Statut attendu : **healthy**.  
+Si **unhealthy** → vérifier que `ecommerce-sg-frontend` autorise le port 80 depuis `ecommerce-sg-alb`.
 
 ---
 
 ## 9. Frontend Option A - EC2
 
 Cette option déploie le frontend React (build statique) servi par **NGINX directement sur EC2**, sans Docker, sans Auto Scaling.
+
+> 📸 _Capture : site avec badge 🟠 **EC2** dans la navbar_
+![Badge EC2](../img/badge-ec2.png)
 
 > 💡 **Indicateur visuel portfolio** : La variable `VITE_DEPLOY_PLATFORM=ec2` affiche un badge **"☁️ EC2"** dans la navbar du site.
 
@@ -1015,7 +1065,7 @@ Cliquer **Next** → ajouter :
 | Instance type | `t3.micro` |
 | Key pair | **Proceed without a key pair** |
 | VPC | `ecommerce-vpc` |
-| Subnet | Un subnet **public** (ex. `ecommerce-pub-a`) |
+| Subnet | Un subnet **public** (ex. `ecommerce-subnet-public1-eu-west-1a`) |
 | Auto-assign public IP | **Enable** |
 | Security group | `ecommerce-sg-frontend` |
 | IAM instance profile | `ecommerce-frontend-ec2-role` |
@@ -1117,6 +1167,9 @@ sudo systemctl reload nginx
 
 Beanstalk gère tout automatiquement : EC2, ALB, autoscaling. Idéal pour comprendre le modèle PaaS. Il utilise l'image Docker du frontend hébergée sur ECR.
 
+> 📸 _Capture : site avec badge 🟢 **Elastic Beanstalk** dans la navbar_
+![Badge Beanstalk](../img/badge-beanstalk.png)
+
 > 💡 **Indicateur visuel portfolio** : La variable `VITE_DEPLOY_PLATFORM=beanstalk` affiche un badge **"☁️ Elastic Beanstalk"** dans la navbar du site.
 
 ---
@@ -1204,203 +1257,268 @@ Créer ce fichier sur votre machine et l'uploader :
 > ℹ️ Le badge `VITE_DEPLOY_PLATFORM=beanstalk` a été intégré au build lors du `docker build --build-arg` à l'étape 10.0.
 
 **Step 2 - Configure service access :**
-- Service role : **Create and use new service role**
-- EC2 instance profile : `ecommerce-frontend-ec2-role`
+
+Deux rôles IAM sont nécessaires ici — créez-les si ils n'existent pas encore :
+
+**Service role** (rôle assumé par Beanstalk pour gérer l'infrastructure) :
+- Cliquer **Create role** → **AWS service** → **Elastic Beanstalk** → **Elastic Beanstalk - Environment** → **Next**
+- Les policies sont ajoutées automatiquement
+- **Role name :** `aws-elasticbeanstalk-service-role` → **Create role**
+- Revenir ici → cliquer 🔄 → sélectionner `aws-elasticbeanstalk-service-role`
+
+**EC2 instance profile** (rôle attaché aux instances EC2 de Beanstalk) :
+- Cliquer **Create role** → **AWS service** → **EC2** → **Next**
+- Ajouter : `AmazonSSMManagedInstanceCore` + `AWSElasticBeanstalkWebTier` + `AmazonEC2ContainerRegistryReadOnly`
+- **Role name :** `ecommerce-beanstalk-ec2-role` → **Create role**
+- Revenir ici → cliquer 🔄 → sélectionner `ecommerce-beanstalk-ec2-role`
+
+**EC2 key pair :** Laisser vide (accès via SSM)
 
 **Step 3 - Set up networking, database, and tags :**
 
 | Champ | Valeur |
 |-------|--------|
 | VPC | `ecommerce-vpc` |
-| Public IP address | ✅ Activated |
-| Instance subnets | Sélectionner les subnets publics |
-| Instance security groups | `ecommerce-sg-frontend` |
+| Public IP address | ✅ **Enabled** |
+| Instance subnets | Sélectionner les **3 subnets publics** |
+| Database | ❌ Désactivé (on utilise RDS existant) |
+| Tags | Optionnel |
+
+> ℹ️ Le Security Group **n'est pas sur cette page** — il est dans le **Step 4**.
 
 **Step 4 - Configure instance traffic and scaling :**
 
+**EC2 security groups :** `ecommerce-sg-frontend`
+
+**Capacity :**
+
 | Champ | Valeur |
 |-------|--------|
-| Root volume type | `gp3` |
-| Root volume size | `20` GB |
-| Min instances | `2` |
-| Max instances | `6` |
-| Instance type | `t3.medium` |
-| Scaling triggers | CPU utilization : `70%` |
+| Environment type | **Single instance** ← pas Load balanced (on utilisera notre ALB public) |
+| Fleet composition | **On-Demand** (stable pour portfolio) |
+| Architecture | `x86_64` |
+| Instance type #1 | `t3.micro` |
+| Instance type #2 | Supprimer (cliquer **Remove**) |
+| Root volume type | **Container default** |
 
 **Step 5 - Configure updates, monitoring, and logging :**
-- Deployment policy : **Rolling**
-- Batch size : `50%`
-- ✅ Health reporting : Enhanced
 
-Cliquer **Submit** → Attendre ~5 minutes
+| Section | Valeur |
+|---------|--------|
+| Health reporting | **Enhanced** ✅ |
+| Health event streaming | Désactivé (évite frais CloudWatch) |
+| Managed updates | ✅ Enable · Minor and patch · Instance replacement : décoché |
+| Email notifications | Optionnel |
+| Deployment policy | **All at once** (instance unique) |
+| X-Ray daemon | Désactivé ✅ |
+| S3 log storage | Désactivé ✅ |
+| Log streaming | Désactivé ✅ |
+| Proxy server | **Nginx** ✅ |
 
-**URL de l'environnement :** Visible dans la console Beanstalk sous la forme `ecommerce-frontend-prod.eba-xxx.eu-west-1.elasticbeanstalk.com`
+**Environment properties** → Cliquer **Add environment property** pour chaque ligne :
+
+| Name | Value |
+|------|-------|
+| `BACKEND_URL` | `http://internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com` |
+| `BACKEND_HOST` | `ecommerce.ngoni.app` |
+
+Cliquer **Next** → **Submit** → Attendre ~5 minutes
+
+---
+
+### 10.2 Attacher l'instance Beanstalk au Target Group
+
+> ℹ️ Beanstalk (Single instance) crée une EC2. On l'attache à `ecommerce-tg-frontend` pour qu'elle soit accessible via l'ALB public — exactement comme l'Option A.
+
+Une fois l'environnement **Health : Ok** :
+
+1. EC2 → **Target Groups** → `ecommerce-tg-frontend` → onglet **Targets** → **Register targets**
+2. Sélectionner l'instance Beanstalk (nom contient `ecommerce-frontend-prod`)
+3. Port : `80` → **Include as pending** → **Register pending targets**
+
+Attendre statut **healthy**.
+
+**URL de l'environnement Beanstalk :** visible dans Elastic Beanstalk → `ecommerce-frontend-prod` → sous la forme `ecommerce-frontend-prod.eba-xxx.eu-west-1.elasticbeanstalk.com` (accès direct, sans passer par l'ALB public)
+
+**URL via ALB public :** `https://ecommerce.ngoni.app` — une fois l'instance registered et healthy dans `ecommerce-tg-frontend`.
 
 ---
 
 ## 11. Frontend Option C - ECS Fargate
 
-ECS Fargate exécute vos conteneurs sans gérer de serveurs. AWS provisionne les ressources de calcul à la demande.
+ECS Fargate exécute vos conteneurs sans gérer de serveurs. AWS provisionne les ressources de calcul à la demande. On utilise le mode **Express Mode** (UI simplifiée qui crée cluster + task definition + service en une fois).
 
-> 💡 **Indicateur visuel portfolio** : La variable `VITE_DEPLOY_PLATFORM=ecs` affiche un badge **"☁️ ECS Fargate"** dans la navbar du site.
+> 📸 _Capture : site avec badge 🟣 **ECS Fargate** dans la navbar_
+![Badge ECS](../img/badge-ecs.png)
 
-### 10.1 Créer le cluster ECS
-
-**Navigation :** Barre de recherche → `ECS` → **Elastic Container Service**
-
-**Cliquer Create cluster**
-
-| Champ | Valeur |
-|-------|--------|
-| Cluster name | `ecommerce-frontend-cluster` |
-| Infrastructure | ✅ **AWS Fargate (serverless)** |
-
-Cliquer **Create**
+> 💡 **Indicateur visuel portfolio** : Le badge **"☁️ ECS Fargate"** s'affiche dans la navbar.
 
 ---
 
-### 10.2 Créer le Task Definition
+### 11.0 Prérequis — Builder une image taguée `ecs`
 
-**Navigation :** ECS → **Task definitions** → **Create new task definition**
+> ⚠️ **Important :** `VITE_DEPLOY_PLATFORM` est une variable **build-time** (intégrée au build React, pas au runtime). La définir en variable d'environnement ECS ne change PAS le badge. Il faut une image dédiée buildée avec le bon `--build-arg`.
 
-**Step 1 - Task definition configuration :**
+```bash
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ECR_URI="${ACCOUNT_ID}.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/frontend"
+
+aws ecr get-login-password --region eu-west-1 | \
+  docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.eu-west-1.amazonaws.com
+
+docker build --build-arg VITE_DEPLOY_PLATFORM=ecs \
+  -f docker/Dockerfile -t ${ECR_URI}:ecs .
+
+docker push ${ECR_URI}:ecs
+```
+
+---
+
+### 11.1 Créer le service via Express Mode
+
+**Navigation :** ECS → **Express Mode** (menu de gauche)
+
+**Section "Let's set up your app" :**
 
 | Champ | Valeur |
 |-------|--------|
-| Task definition family | `ecommerce-frontend` |
-| Launch type | **AWS Fargate** |
-| Operating system/Architecture | **Linux/X86_64** |
-| Task size - CPU | `.25 vCPU` |
-| Task size - Memory | `0.5 GB` |
-| Task role | `ecommerce-frontend-ec2-role` |
-| Task execution role | **Create new role** |
+| Image URI | `ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/frontend:ecs` |
+| Private registry authentication | ❌ Décoché (ECR même compte → via Task execution role) |
+| Task execution role | `ecsTaskExecutionRole` (auto-créé) |
+| Infrastructure role | `ecsInfrastructureRoleForExpressServices` (auto-créé) |
 
-**Container :**
+**Additional configurations :**
 
 | Champ | Valeur |
 |-------|--------|
-| Name | `frontend` |
-| Image URI | `ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/frontend:latest` |
+| Cluster | Laisser vide (crée `default` automatiquement) |
+| Name | Auto-généré |
 | Container port | `80` |
-| Protocol | `TCP` |
+| Health check path | `/` |
 
-**Environment variables (cliquer Add environment variable pour chaque) :**
+**Environment variables :**
 
-| Key | Value type | Value |
-|-----|-----------|-------|
-| `BACKEND_URL` | Value | `http://INTERNAL_ALB_DNS` |
-| `BACKEND_HOST` | Value | `api.ecommerce.local` |
+| Key | Value |
+|-----|-------|
+| `BACKEND_URL` | `http://internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com` |
+| `BACKEND_HOST` | `ecommerce.ngoni.app` |
 
-**Log collection :**
-- ✅ **Use log collection**
-- Log group : `/ecs/ecommerce-frontend`
+> ℹ️ Pas besoin de `VITE_DEPLOY_PLATFORM` ici (build-time, déjà dans l'image `:ecs`). Seuls `BACKEND_URL`/`BACKEND_HOST` sont des variables runtime utilisées par NGINX.
 
-Cliquer **Create**
-
----
-
-### 10.3 Créer le Service ECS
-
-**Navigation :** ECS → `ecommerce-frontend-cluster` → Onglet **Services** → **Deploy**
+**Compute :**
 
 | Champ | Valeur |
 |-------|--------|
-| Compute options | **Launch type** → **FARGATE** |
-| Application type | **Service** |
-| Family | `ecommerce-frontend` |
-| Revision | **LATEST** |
-| Service name | `ecommerce-frontend-svc` |
-| Desired tasks | `2` |
+| CPU | `.25 vCPU` |
+| Memory | `.5 GB` |
 
-**Networking :**
+**Auto scaling :**
+
+| Champ | Valeur |
+|-------|--------|
+| ECS service metric | Average CPU utilization |
+| Target value | `70` |
+| Minimum tasks | `1` |
+| Maximum tasks | `2` |
+
+**Networking** (cocher **Customize networking configurations**) :
 
 | Champ | Valeur |
 |-------|--------|
 | VPC | `ecommerce-vpc` |
-| Subnets | Subnets publics |
-| Security group | `ecommerce-sg-frontend` |
-| Public IP | **Turned on** |
+| Subnets | Les **3 subnets publics** |
+| Security groups | `ecommerce-sg-frontend` |
 
-**Load balancing :**
-- ✅ **Use an existing load balancer**
-- Load balancer : `ecommerce-alb-pub` (créé à l'étape 8)
-- Listener : **Use an existing listener** → `443 : HTTPS`
-- Target group : `ecommerce-tg-frontend`
-
-Cliquer **Deploy**
+Cliquer **Create** → attendre ~3-5 minutes que la task soit **Running**.
 
 ---
 
-## 12. CloudFront
+### 11.2 Consolider ECS derrière l'ALB public partagé
+
+Express Mode crée **automatiquement** sa propre infrastructure :
+- un **ALB public** dédié (`ecs-express-gateway-alb-xxxx`)
+- un **Target Group type IP** (`ecs-gateway-tg-xxxx`) où sont enregistrées les tasks Fargate
+
+Pour servir les 3 options derrière le **même** ALB public (`ecommerce-alb-pub`), on récupère le TG auto-créé et on supprime l'ALB en doublon.
+
+**Étape 1 — Supprimer l'ALB public créé par ECS Express :**
+
+EC2 → **Load Balancers** → `ecs-express-gateway-alb-xxxx` → **Actions → Delete**
+
+> ℹ️ Ne PAS supprimer le Target Group `ecs-gateway-tg-xxxx` — on le réutilise. Il reste valide même sans son ALB.
+
+**Étape 2 — Ajouter le TG ECS au listener de `ecommerce-alb-pub` :**
+
+EC2 → **Load Balancers** → `ecommerce-alb-pub` → **Listeners** → HTTPS:443 → **Edit** :
+- Routing action : **Forward to target groups**
+- Garder `ecommerce-tg-frontend` (poids `2`)
+- **Add target group** → `ecs-gateway-tg-xxxx` (poids `1`)
+- ✅ **Turn on target group stickiness** (voir section 8.3 — obligatoire)
+
+Cliquer **Save changes**.
+
+**Étape 3 — Vérifier :**
+
+EC2 → **Target Groups** → `ecs-gateway-tg-xxxx` → **Targets** → la task Fargate doit être **healthy** (port réel de la task, type IP).
+
+> ℹ️ Le SG de la task ECS (`ecommerce-sg-frontend`) autorise déjà le port 80 depuis `ecommerce-sg-alb`, donc le trafic passe sans config SG supplémentaire.
+
+**Résultat :** `https://ecommerce.ngoni.app` route ~66% vers EC2/Beanstalk et ~33% vers ECS Fargate (selon les poids), avec stickiness pour garder chaque visiteur sur la même plateforme.
+
+---
+
+## 12. CloudFront (optionnel)
+
+> ℹ️ **Étape optionnelle — non déployée dans ce portfolio.** CloudFront ajoute un CDN mondial + WAF devant l'ALB public. Documenté ici pour référence d'architecture.
 
 CloudFront met en cache le frontend globalement (CDN mondial) et ajoute une couche de sécurité WAF.
 
-**Navigation :** Barre de recherche → `CloudFront` → **CloudFront**
+**Navigation :** Barre de recherche → `CloudFront` → **Create distribution**
 
-> ⚠️ CloudFront est un service **global** (pas régional) - la console affiche toujours "Global" dans le sélecteur de région. C'est normal.
+> ⚠️ CloudFront est un service **global** — la console affiche toujours "Global" dans le sélecteur de région. C'est normal.
 
-**Cliquer Create a CloudFront distribution**
-
-### Origin
+### Step 1 - Get started
 
 | Champ | Valeur |
 |-------|--------|
-| Origin domain | Coller le DNS de l'ALB : `ecommerce-alb-pub-xxx.eu-west-1.elb.amazonaws.com` |
-| Protocol | **HTTPS only** |
-| HTTPS port | `443` |
-| Origin path | Laisser vide |
-| Name | `ALB-ecommerce` |
+| Distribution name | `ecommerce-cdn` |
+| Distribution type | **Single website or app** |
+| Route 53 managed domain | Laisser vide (domaine externe sur Cloudflare) |
 
-### Default cache behavior
+### Step 2 - Specify origin
 
 | Champ | Valeur |
 |-------|--------|
-| Viewer protocol policy | **Redirect HTTP to HTTPS** |
-| Allowed HTTP methods | **GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE** (API + frontend) |
-| Cache policy | **CachingDisabled** pour les routes `/api/*` |
-| Origin request policy | **AllViewer** |
-| Compress objects automatically | ✅ Yes |
+| Origin type | **Elastic Load Balancer** |
+| Elastic Load Balancing origin | `ecommerce-alb-pub-xxx.eu-west-1.elb.amazonaws.com` |
+| Origin settings | **Use recommended origin settings** |
+| Cache settings | **Use recommended cache settings tailored to ELB** |
 
-### Additional cache behaviors - pour l'API
-
-Cliquer **Add behavior** :
+### Step 3 - Enable security
 
 | Champ | Valeur |
 |-------|--------|
-| Path pattern | `/api/*` |
-| Cache policy | **CachingDisabled** |
-| Origin request policy | **AllViewer** |
+| WAF | **Enable security protections** (~$14/mois) ou **Do not enable** pour économiser |
 
-### Settings
+### Step 4 - Review and create
 
-| Champ | Valeur |
-|-------|--------|
-| Price class | **Use only North America and Europe** |
-| Alternate domain name (CNAME) | `ecommerce.votredomaine.com` |
-| Custom SSL certificate | Sélectionner votre certificat ACM |
-| Default root object | `index.html` |
+Vérifier → **Create distribution** → Attendre **~10 minutes** (déploiement mondial).
 
-Cliquer **Create distribution** → Attendre **~10 minutes** (déploiement mondial)
-
-**Récupérer le domaine CloudFront :** Visible dans la liste, ex. `d1234abcd.cloudfront.net`
+**Récupérer le domaine CloudFront :** ex. `d1234abcd.cloudfront.net`
 
 ---
 
-### Route 53 - Pointer votre domaine
+### 12.1 Connecter le domaine custom (`ecommerce.ngoni.app`)
 
-**Navigation :** Barre de recherche → `Route 53` → **Route 53**
+> ⚠️ **CloudFront exige un certificat ACM dans la région `us-east-1` (N. Virginia)** — différent du certificat ALB (eu-west-1). Il faut en créer un nouveau.
 
-**Hosted zones** → sélectionner votre zone → **Create record**
+1. **ACM (us-east-1)** → Request certificate → `ecommerce.ngoni.app` → validation DNS (Cloudflare)
+2. **CloudFront** → distribution → **Settings → Edit** → Alternate domain names → ajouter `ecommerce.ngoni.app` + sélectionner le cert us-east-1
+3. **Cloudflare DNS** → changer le CNAME `ecommerce` :
+   - de  → `ecommerce-alb-pub-xxx.eu-west-1.elb.amazonaws.com`
+   - vers → `d1234abcd.cloudfront.net`
 
-| Champ | Valeur |
-|-------|--------|
-| Record name | `ecommerce` |
-| Record type | **A** |
-| ✅ Alias | Coché |
-| Route traffic to | **Alias to CloudFront distribution** |
-| Distribution | Sélectionner votre distribution |
-
-Cliquer **Create records**
+> 💡 **Trade-off portfolio** : avec CloudFront en cache, le badge multi-plateforme (EC2/Beanstalk/ECS) peut être masqué car les pages sont mises en cache. Pour garder le démo multi-plateforme visible, pointer le domaine directement sur l'ALB public (sans CloudFront).
 
 ---
 
@@ -1483,11 +1601,17 @@ EC2 → **Load Balancers** → `ecommerce-alb-pub` → Copier le **DNS name** �
 
 ### 13.6 Test end-to-end depuis le navigateur
 
-1. Ouvrir `https://ecommerce.votredomaine.com` → Page d'accueil du shop ✅
+1. Ouvrir `https://ecommerce.ngoni.app` → Page d'accueil du shop ✅
 2. Aller dans **Produits** → La liste s'affiche (product-service) ✅
 3. Cliquer **Connexion** → Se connecter avec `admin@ecommerce.com` / `admin123` ✅
 4. Ajouter un produit au panier → Passer une commande ✅
 5. Dashboard Admin → Gérer les commandes, produits, avis ✅
+
+> 📸 _Capture : page d'accueil du site en production_
+![Page d'accueil](../img/shop-home.png)
+
+> 📸 _Capture : catalogue produits_
+![Catalogue produits](../img/shop-products.png)
 
 ---
 
@@ -1496,215 +1620,46 @@ EC2 → **Load Balancers** → `ecommerce-alb-pub` → Copier le **DNS name** �
 | Service AWS | Ressource | Nom |
 |-------------|-----------|-----|
 | VPC | Réseau privé | `ecommerce-vpc` |
-| VPC | Subnets publics | `ecommerce-pub-a/b/c` |
-| VPC | Subnets privés | `ecommerce-priv-a/b` |
-| VPC | Subnets DB | `ecommerce-db-a/b` |
-| VPC | NAT Gateway | `ecommerce-nat-a/b` |
-| EC2 | Security Groups | `sg-alb`, `sg-frontend`, `sg-eks`, `sg-rds` |
+| VPC | Subnets publics | `ecommerce-subnet-public1/2/3-eu-west-1a/b/c` |
+| VPC | Subnets privés | `ecommerce-subnet-private1/2/3-eu-west-1a/b/c` |
+| VPC | Subnets DB | `ecommerce-db-a/b/c` |
+| VPC | NAT Gateway | `ecommerce-nat` |
+| EC2 | Security Groups | `sg-alb`, `sg-frontend`, `sg-rds` (+ SGs EKS auto) |
 | RDS MySQL | Instance | `ecommerce-mysql` |
 | Secrets Manager | Secrets | `ecommerce/db/credentials`, `ecommerce/jwt/secret` |
-| ECR | Repositories | 5 repos (`auth`, `product`, `order`, `review`, `frontend`) |
-| EKS | Cluster K8s | `ecommerce-cluster` |
-| EKS | Node Group | `ecommerce-nodes` (2-6 × t3.medium) |
-| Helm | Microservices | `ecommerce-microservices` (4 services, 8 pods) |
-| EC2 | Launch Template | `ecommerce-frontend-lt` |
-| EC2 | Auto Scaling Group | `ecommerce-frontend-asg` (2-6 instances) |
-| Beanstalk | Application | `ecommerce-frontend` |
-| ECS | Cluster Fargate | `ecommerce-frontend-cluster` |
+| ECR | Repository | `ecommerce/frontend` (image Beanstalk/ECS) |
+| EKS | Cluster K8s (Auto Mode) | `ecommerce-cluster` |
+| Helm | Microservices | `ecommerce-microservices` (4 services) |
+| Helm | AWS LB Controller | `aws-load-balancer-controller` |
+| EKS | ALB interne | `internal-ecommerce-alb` |
+| EC2 | Instance frontend (Option A) | `ecommerce-frontend-ec2` |
+| Beanstalk | Environnement (Option B) | `ecommerce-frontend-prod` |
+| ECS | Service Fargate (Option C) | Express Mode (`default` cluster) |
 | EC2 | ALB public | `ecommerce-alb-pub` |
-| EC2 | Target Group | `ecommerce-tg-frontend` |
-| CloudFront | Distribution | `d1234abcd.cloudfront.net` |
-| Route 53 | Record | `ecommerce.votredomaine.com` |
-| ACM | Certificat SSL | `*.votredomaine.com` |
-| CloudWatch | Dashboard | `ecommerce-monitoring` |
+| EC2 | Target Groups | `ecommerce-tg-frontend` (Instance), `ecs-gateway-tg` (IP) |
+| ACM | Certificat SSL (eu-west-1) | `ecommerce.ngoni.app` |
+| Cloudflare | DNS CNAME | `ecommerce.ngoni.app` → ALB public |
 
 ---
 
 ## Coûts estimés (eu-west-1, usage modéré)
 
-| Service | Instance | Coût/mois estimé |
-|---------|----------|-----------------|
-| EKS Cluster | - | ~$73 |
-| EC2 Nodes (3 × t3.medium) | - | ~$90 |
-| RDS MySQL (db.t3.micro) | - | ~$10-15 |
-| NAT Gateway (2 AZ) | - | ~$65 |
-| ALB | - | ~$20 |
-| ECR (5 repos) | - | ~$5 |
-| CloudFront | 10 GB | ~$1 |
-| **Total estimé** | | **~$309/mois** |
+| Service | Détail | Coût/mois estimé |
+|---------|--------|-----------------|
+| EKS Cluster | Control plane (Auto Mode) | ~$73 |
+| EKS Nodes | gérés par Auto Mode (~2 nodes) | ~$30-60 |
+| RDS MySQL | db.t3.micro | ~$10-15 |
+| NAT Gateway | 1 AZ | ~$33 |
+| ALB public | `ecommerce-alb-pub` | ~$16 |
+| EC2 frontend | 1× t3.micro (Free Tier) | ~$0-7.5 |
+| Beanstalk | 1× t3.micro | ~$7.5 |
+| ECS Fargate | 0.25 vCPU, 0.5 GB | ~$9 |
+| ECR | 1 repo | ~$1 |
+| **Total estimé** | | **~$190-230/mois** |
 
-> 💡 Pour réduire les coûts en développement : utiliser 1 seul NAT GW, des instances `t3.small`, et `db.t3.small`.
-
----
-
-*Ce guide Console AWS complète le [Guide CLI](./GUIDE-DEPLOIEMENT-MANUEL.md) et le [Terraform](../terraform/). Les trois approches déploient la même architecture.*
+> 💡 **Économie portfolio** : éteindre EC2/Beanstalk/ECS hors démos (`stop-instances`), scale EKS à 0, stopper RDS. Seuls EKS control plane + ALB + NAT restent facturés en continu (~$120/mois).
 
 ---
 
-## Annexe A - AWS Load Balancer Controller (console + kubectl)
+*Ce guide Console AWS complète le [Guide CLI](./GUIDE-DEPLOIEMENT-MANUEL.md), l'[Architecture détaillée](./ARCHITECTURE.md) et le [Terraform](../terraform/).*
 
-Le AWS Load Balancer Controller est indispensable pour que votre Ingress Kubernetes crée automatiquement l'ALB interne EKS. Sans lui, `kubectl get ingress -n ecommerce` reste sans `ADDRESS`.
-
-**Navigation :** Cette étape se fait en CLI depuis votre terminal après avoir configuré kubectl.
-
-```bash
-# Depuis votre terminal local (après aws eks update-kubeconfig)
-eksctl utils associate-iam-oidc-provider \
-  --region eu-west-1 --cluster ecommerce-cluster --approve
-
-curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.1/docs/install/iam_policy.json
-
-aws iam create-policy \
-  --policy-name AWSLoadBalancerControllerIAMPolicy \
-  --policy-document file://iam_policy.json
-
-eksctl create iamserviceaccount \
-  --cluster=ecommerce-cluster --namespace=kube-system \
-  --name=aws-load-balancer-controller \
-  --role-name AmazonEKSLoadBalancerControllerRole \
-  --attach-policy-arn=arn:aws:iam::VOTRE_ACCOUNT_ID:policy/AWSLoadBalancerControllerIAMPolicy \
-  --approve
-
-helm repo add eks https://aws.github.io/eks-charts && helm repo update
-helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
-  -n kube-system \
-  --set clusterName=ecommerce-cluster \
-  --set serviceAccount.create=false \
-  --set serviceAccount.name=aws-load-balancer-controller
-```
-
-**Vérifier dans la console :**  
-EC2 → Load Balancers → vous voyez apparaître un ALB avec le schéma **internal** nommé automatiquement par EKS.
-
----
-
-## Annexe B - HPA : vérification dans la console
-
-**Navigation :** EKS → `ecommerce-cluster` → **Resources** → **Workloads** → **HorizontalPodAutoscalers**
-
-Vous voyez les 4 HPA avec leurs métriques en temps réel :
-
-| Nom | Current | Min | Max |
-|-----|---------|-----|-----|
-| auth-service | 12% / 70% | 2 | 8 |
-| product-service | 8% / 70% | 2 | 10 |
-| order-service | 5% / 70% | 2 | 6 |
-| review-service | 4% / 70% | 2 | 6 |
-
-**Prérequis :** Le Metrics Server doit être installé sur le cluster.
-
-```bash
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-```
-
-Sans Metrics Server, les HPAs affichent `<unknown>/70%` dans la colonne TARGETS et ne scalent pas.
-
----
-
-## Annexe C - Cluster Autoscaler (console EC2 Auto Scaling)
-
-Le Cluster Autoscaler ajuste le nombre de nodes EC2 en fonction des pods en attente de scheduling.
-
-**Installer via terminal :**
-```bash
-helm repo add autoscaler https://kubernetes.github.io/autoscaler
-helm install cluster-autoscaler autoscaler/cluster-autoscaler \
-  --namespace kube-system \
-  --set autoDiscovery.clusterName=ecommerce-cluster \
-  --set awsRegion=eu-west-1
-```
-
-**Observer dans la console EC2 :**  
-EC2 → **Auto Scaling Groups** → `ecommerce-nodes-xxx` → Onglet **Activity**
-
-Vous voyez l'historique des événements de scaling : quand un node a été ajouté (pods pending) ou supprimé (nodes sous-utilisés pendant 10 minutes).
-
----
-
-## Annexe D - VPC Flow Logs (console)
-
-Les Flow Logs capturent les métadonnées réseau de tout le trafic dans le VPC.
-
-**Navigation :** VPC → **Your VPCs** → `ecommerce-vpc` → Onglet **Flow logs** → **Create flow log**
-
-| Champ | Valeur |
-|-------|--------|
-| Filter | All |
-| Maximum aggregation interval | 1 minute |
-| Destination | Send to CloudWatch Logs |
-| Destination log group | `/aws/vpc/flowlogs/ecommerce` |
-| IAM role | Créer un nouveau rôle → `ecommerce-vpc-flow-log-role` |
-
-Cliquer **Create flow log**
-
-**Analyser les logs :**  
-CloudWatch → **Log Insights** → sélectionner `/aws/vpc/flowlogs/ecommerce`
-
-```
-# Requête : top 10 des IPs sources les plus actives
-fields srcAddr, dstAddr, dstPort, action
-| stats count(*) as requests by srcAddr
-| sort requests desc
-| limit 10
-```
-
----
-
-## Annexe E - CloudTrail (console)
-
-CloudTrail enregistre toutes les actions API AWS : qui a créé/modifié/supprimé quelle ressource, quand, depuis quelle IP.
-
-**Navigation :** Barre de recherche → `CloudTrail` → **Trails** → **Create trail**
-
-| Champ | Valeur |
-|-------|--------|
-| Trail name | `ecommerce-trail` |
-| Storage location | Create new S3 bucket : `ecommerce-cloudtrail-VOTRE_ACCOUNT_ID` |
-| Log file SSE-KMS encryption | Désactivé (simplification) |
-| CloudWatch Logs | ✅ Enabled → New log group `/aws/cloudtrail/ecommerce` |
-| Log events | Management events + Data events (optionnel) |
-
-Cliquer **Create trail**
-
-**Rechercher un événement :**  
-CloudTrail → **Event history** → Filtrer par **Event name** = `CreateSecurityGroup` ou `RunInstances`
-
----
-
-## Annexe F - ECR Lifecycle Policy (console)
-
-**Navigation :** ECR → `ecommerce/auth-service` → **Lifecycle policies** → **Create rule**
-
-| Champ | Valeur |
-|-------|--------|
-| Rule priority | `1` |
-| Rule description | `Garder les 10 dernières images` |
-| Image status | `Any` |
-| Match criteria | **Image count more than** → `10` |
-| Action | **Expire** |
-
-Cliquer **Save** - répéter pour les 4 autres repositories.
-
----
-
-## Annexe G - Alarmes CloudWatch (console)
-
-**Navigation :** CloudWatch → **Alarms** → **Create alarm**
-
-**Alarme 1 : erreurs 5xx ALB**
-
-1. Cliquer **Select metric** → ApplicationELB → Per AppELB Metrics → `ecommerce-alb-pub` → `HTTPCode_Target_5XX_Count`
-2. Stat : Sum | Period : 1 minute
-3. Conditions : Greater than `10`
-4. Notification : Create new SNS topic → `ecommerce-alerts` → entrer votre email
-5. Alarm name : `ecommerce-alb-5xx-errors`
-
-**Alarme 2 : CPU MySQL**
-
-1. Metric → RDS → Per-Database Metrics → `ecommerce-mysql` → `CPUUtilization`
-2. Stat : Average | Period : 1 minute
-3. Conditions : Greater than `80`
-4. Notification : sélectionner `ecommerce-alerts` (créé ci-dessus)
-5. Alarm name : `ecommerce-rds-cpu-high`
-
-**Confirmer l'abonnement email :** AWS envoie un email de confirmation SNS - cliquer le lien pour commencer à recevoir les alertes.
