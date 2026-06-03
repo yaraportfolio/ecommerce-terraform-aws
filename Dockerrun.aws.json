@@ -1,0 +1,14 @@
+{
+  "AWSEBDockerrunVersion": "1",
+  "Image": {
+    "Name": "0203xxxx.dkr.ecr.eu-west-1.amazonaws.com/ecommerce/frontend:beanstalk",
+    "Update": "true"
+  },
+  "Ports": [
+    { "ContainerPort": "80" }
+  ],
+  "Environment": [
+    { "Name": "BACKEND_URL", "Value": "http://internal-ecommerce-alb-xxxxx.eu-west-1.elb.amazonaws.com" },
+    { "Name": "BACKEND_HOST", "Value": "ecommerce.mondomaine.app" }
+  ]
+}
