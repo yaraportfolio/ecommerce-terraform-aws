@@ -8,7 +8,7 @@
 
 > **Auteur :** Yara Mahi Mohamed — Portfolio DevOps & SRE
 > **Stack :** React 18 + NGINX · Node.js 20 (4 microservices) · RDS MySQL 8.0 · EKS Auto Mode + Helm
-> **Région :** `eu-west-1` (Irlande) · **Domaine :** [ecommerce.ngoni.app](https://ecommerce.ngoni.app)
+> **Région :** `eu-west-1` (Irlande) · **Domaine :** [ecommerce.mondomaine.app](https://ecommerce.mondomaine.app)
 
 Déploiement d'une plateforme e-commerce microservices sur AWS, avec le **frontend déployé de 3 façons différentes** (EC2, Elastic Beanstalk, ECS Fargate) pour illustrer la progression IaaS → PaaS → Serverless. Un badge dynamique dans la navbar indique en temps réel sur quelle plateforme tourne l'instance servie.
 
@@ -17,7 +17,7 @@ Déploiement d'une plateforme e-commerce microservices sur AWS, avec le **fronte
 ## 🗺️ Architecture
 
 ```
-Internet → Cloudflare DNS (ecommerce.ngoni.app)
+Internet → Cloudflare DNS (ecommerce.mondomaine.app)
                   │ HTTPS
         ┌─────────▼──────────┐
         │  ALB public (443)  │  ecommerce-alb-pub

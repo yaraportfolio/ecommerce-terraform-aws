@@ -2,7 +2,7 @@
 
 **Auteur :** Yara Mahi Mohamed | Portfolio DevOps & SRE  
 **Stack :** React 18 + NGINX · Node.js 20 · RDS MySQL 8.0 · EKS Auto Mode + Helm  
-**Région principale :** `eu-west-1` (Irlande) · **Domaine :** [ecommerce.ngoni.app](https://ecommerce.ngoni.app)
+**Région principale :** `eu-west-1` (Irlande) · **Domaine :** [ecommerce.mondomaine.app](https://ecommerce.mondomaine.app)
 
 > ℹ️ **État du déploiement** : le DNS est géré par **Cloudflare** (CNAME → ALB public). CloudFront est **optionnel** (documenté mais non déployé). Le frontend EC2 tourne en **instance unique** (NGINX natif, sans Docker). La base est **RDS MySQL 8.0** (compatible MariaDB 10.11), pas Aurora.
 
@@ -40,7 +40,7 @@ L'architecture déploie une application e-commerce composée de cinq services di
 Navigateur
     │
     ▼
-Cloudflare DNS (ecommerce.ngoni.app)        [CloudFront optionnel]
+Cloudflare DNS (ecommerce.mondomaine.app)        [CloudFront optionnel]
     │
     ▼
 ALB public (HTTPS :443, ACM)  ──  forward pondéré + stickiness
@@ -153,15 +153,15 @@ auth:3001  product:3002  order:3003  review:3004
 
 ### DNS — Cloudflare (déployé)
 
-Le domaine `ecommerce.ngoni.app` est géré par **Cloudflare**. Un enregistrement **CNAME** (mode "DNS only", sans proxy) pointe le sous-domaine vers le DNS de l'ALB public :
+Le domaine `ecommerce.mondomaine.app` est géré par **Cloudflare**. Un enregistrement **CNAME** (mode "DNS only", sans proxy) pointe le sous-domaine vers le DNS de l'ALB public :
 
 ```
-ecommerce.ngoni.app  CNAME  ecommerce-alb-pub-xxxx.eu-west-1.elb.amazonaws.com
+ecommerce.mondomaine.app  CNAME  ecommerce-alb-pub-xxxx.eu-west-1.elb.amazonaws.com
 ```
 
 ### ACM - AWS Certificate Manager (déployé)
 
-Un certificat ACM pour `ecommerce.ngoni.app` (région `eu-west-1`) est attaché au **listener HTTPS :443 de l'ALB public**. La terminaison TLS se fait donc sur l'ALB. Renouvellement automatique avant expiration — zéro gestion manuelle.
+Un certificat ACM pour `ecommerce.mondomaine.app` (région `eu-west-1`) est attaché au **listener HTTPS :443 de l'ALB public**. La terminaison TLS se fait donc sur l'ALB. Renouvellement automatique avant expiration — zéro gestion manuelle.
 
 > ℹ️ Le frontend NGINX proxifie `/api/*` vers l'ALB interne EKS (variable `BACKEND_URL`). Le navigateur ne voit que l'ALB public en HTTPS.
 
@@ -388,7 +388,7 @@ systemctl enable --now nginx
   "Ports": [{ "ContainerPort": "80" }],
   "Environment": [
     { "Name": "BACKEND_URL", "Value": "http://internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com" },
-    { "Name": "BACKEND_HOST", "Value": "ecommerce.ngoni.app" }
+    { "Name": "BACKEND_HOST", "Value": "ecommerce.mondomaine.app" }
   ]
 }
 ```
@@ -899,7 +899,7 @@ Les VPC Flow Logs capturent les métadonnées de chaque connexion réseau dans l
 ### Scénario : un utilisateur consulte la liste des produits
 
 ```
-1. Navigateur → https://ecommerce.ngoni.app/products
+1. Navigateur → https://ecommerce.mondomaine.app/products
    Cloudflare DNS résout le domaine vers l'ALB public (CNAME)
 
 2. ALB public (ecommerce-alb-pub)
