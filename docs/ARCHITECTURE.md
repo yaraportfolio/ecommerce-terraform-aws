@@ -151,7 +151,7 @@ auth:3001  product:3002  order:3003  review:3004
 
 ## 3. Couche DNS & TLS
 
-### DNS — Cloudflare (déployé)
+### DNS - Cloudflare (déployé)
 
 Le domaine `ecommerce.mondomaine.app` est géré par **Cloudflare**. Un enregistrement **CNAME** (mode "DNS only", sans proxy) pointe le sous-domaine vers le DNS de l'ALB public :
 
@@ -161,19 +161,19 @@ ecommerce.mondomaine.app  CNAME  ecommerce-alb-pub-xxxx.eu-west-1.elb.amazonaws.
 
 ### ACM - AWS Certificate Manager (déployé)
 
-Un certificat ACM pour `ecommerce.mondomaine.app` (région `eu-west-1`) est attaché au **listener HTTPS :443 de l'ALB public**. La terminaison TLS se fait donc sur l'ALB. Renouvellement automatique avant expiration — zéro gestion manuelle.
+Un certificat ACM pour `ecommerce.mondomaine.app` (région `eu-west-1`) est attaché au **listener HTTPS :443 de l'ALB public**. La terminaison TLS se fait donc sur l'ALB. Renouvellement automatique avant expiration - zéro gestion manuelle.
 
 > ℹ️ Le frontend NGINX proxifie `/api/*` vers l'ALB interne EKS (variable `BACKEND_URL`). Le navigateur ne voit que l'ALB public en HTTPS.
 
-### CloudFront — optionnel (non déployé)
+### CloudFront - optionnel (non déployé)
 
-CloudFront (CDN mondial + WAF) peut être ajouté **devant** l'ALB public pour mettre en cache les assets statiques et filtrer les attaques (SQLi, XSS, rate limiting). Non déployé dans ce portfolio — voir la section 12 du [guide console](./GUIDE-CONSOLE-AWS.md).
+CloudFront (CDN mondial + WAF) peut être ajouté **devant** l'ALB public pour mettre en cache les assets statiques et filtrer les attaques (SQLi, XSS, rate limiting). Non déployé dans ce portfolio - voir la section 12 du [guide console](./GUIDE-CONSOLE-AWS.md).
 
 > ⚠️ CloudFront exigerait un certificat ACM en **`us-east-1`** (contrainte CloudFront) et masquerait potentiellement le démo multi-plateforme via son cache.
 
-### Route 53 — alternative (non utilisé)
+### Route 53 - alternative (non utilisé)
 
-Sur un domaine hébergé chez AWS, **Route 53** remplacerait Cloudflare avec un *alias record* (A) vers l'ALB ou CloudFront — pratique pour pointer la racine d'un domaine (ce qu'un CNAME ne permet pas) et activer des health checks/failover.
+Sur un domaine hébergé chez AWS, **Route 53** remplacerait Cloudflare avec un *alias record* (A) vers l'ALB ou CloudFront - pratique pour pointer la racine d'un domaine (ce qu'un CNAME ne permet pas) et activer des health checks/failover.
 
 ---
 
@@ -284,28 +284,28 @@ ecommerce-sg-rds              (RDS MySQL)
 
 ### Détail de chaque Security Group (vérifié sur AWS)
 
-**ecommerce-sg-alb** — point d'entrée internet (créé manuellement)
+**ecommerce-sg-alb** - point d'entrée internet (créé manuellement)
 
 | Direction | Protocol | Port | Source |
 |-----------|----------|------|--------|
 | Inbound | TCP | 80 | 0.0.0.0/0 |
 | Inbound | TCP | 443 | 0.0.0.0/0 |
 
-**ecommerce-sg-frontend** — instances frontend EC2/Beanstalk/ECS (créé manuellement)
+**ecommerce-sg-frontend** - instances frontend EC2/Beanstalk/ECS (créé manuellement)
 
 | Direction | Protocol | Port | Source |
 |-----------|----------|------|--------|
 | Inbound | TCP | 80 | `ecommerce-sg-alb` |
 
-> ✅ Aucun port SSH (22) ouvert — l'accès aux instances se fait exclusivement via **AWS Systems Manager Session Manager**.
+> ✅ Aucun port SSH (22) ouvert - l'accès aux instances se fait exclusivement via **AWS Systems Manager Session Manager**.
 
-**ecommerce-sg-alb-interne-backend** — ALB interne EKS (auto-créé par le LBC)
+**ecommerce-sg-alb-interne-backend** - ALB interne EKS (auto-créé par le LBC)
 
 | Direction | Protocol | Port | Source |
 |-----------|----------|------|--------|
 | Inbound | TCP | 80 | `ecommerce-sg-frontend` |
 
-**ecommerce-sg-eks-nodes** — nœuds EKS Auto Mode (auto-créé par EKS)
+**ecommerce-sg-eks-nodes** - nœuds EKS Auto Mode (auto-créé par EKS)
 
 | Direction | Protocol | Port | Source |
 |-----------|----------|------|--------|
@@ -314,7 +314,7 @@ ecommerce-sg-rds              (RDS MySQL)
 
 La règle self permet la communication pod-to-pod, node-to-node, et les health checks Kubernetes.
 
-**ecommerce-sg-rds** — base de données RDS MySQL (créé manuellement)
+**ecommerce-sg-rds** - base de données RDS MySQL (créé manuellement)
 
 | Direction | Protocol | Port | Source |
 |-----------|----------|------|--------|
@@ -323,7 +323,7 @@ La règle self permet la communication pod-to-pod, node-to-node, et les health c
 
 La base n'est joignable que depuis le cluster EKS. Ni le frontend, ni internet, ni un bastion n'y accèdent directement.
 
-> ℹ️ **`ecommerce-sg-eks-controlplane`** (l'ancien `ecommerce-sg-eks` créé manuellement) garde une règle vestigiale `:3001-3004 ← ecommerce-sg-frontend` — héritage de la conception initiale, désormais inutile car le vrai trafic passe par l'ALB interne. Sans impact, mais nettoyable.
+> ℹ️ **`ecommerce-sg-eks-controlplane`** (l'ancien `ecommerce-sg-eks` créé manuellement) garde une règle vestigiale `:3001-3004 ← ecommerce-sg-frontend` - héritage de la conception initiale, désormais inutile car le vrai trafic passe par l'ALB interne. Sans impact, mais nettoyable.
 
 ---
 
@@ -338,7 +338,7 @@ Le badge plateforme dans la navbar (`VITE_DEPLOY_PLATFORM`, build-time) indique 
 
 ### Option A - EC2 (instance unique)
 
-**Principe :** Une VM EC2 (`t3.micro`, instance unique). Au démarrage, le User Data installe NGINX + Node.js, clone le repository frontend, build le projet React directement sur la machine, et copie les fichiers statiques dans le répertoire NGINX. Pas de Docker — le frontend tourne nativement.
+**Principe :** Une VM EC2 (`t3.micro`, instance unique). Au démarrage, le User Data installe NGINX + Node.js, clone le repository frontend, build le projet React directement sur la machine, et copie les fichiers statiques dans le répertoire NGINX. Pas de Docker - le frontend tourne nativement.
 
 **Composants :**
 - **Instance EC2** : Amazon Linux 2023, `t3.micro`, dans un subnet public, rôle IAM `ecommerce-frontend-ec2-role` (`AmazonSSMManagedInstanceCore`)
@@ -361,7 +361,7 @@ systemctl enable --now nginx
 
 **Accès aux instances :** via AWS Systems Manager Session Manager uniquement. Aucun port SSH (22) exposé, aucune clé SSH requise.
 
-**Variable d'environnement :** `VITE_DEPLOY_PLATFORM=ec2` injectée au build — affiche le badge **"☁️ EC2"** dans la navbar.
+**Variable d'environnement :** `VITE_DEPLOY_PLATFORM=ec2` injectée au build - affiche le badge **"☁️ EC2"** dans la navbar.
 
 **Avantages :** contrôle total sur la VM, debugging via SSM Session Manager, coût prévisible, pas de runtime Docker à maintenir
 
@@ -373,7 +373,7 @@ systemctl enable --now nginx
 
 **Principe :** PaaS géré par AWS. On fournit un fichier `Dockerrun.aws.json` décrivant l'image ECR et les variables d'environnement. Beanstalk provisionne et gère l'EC2 sous-jacent (OS, déploiement, health checks).
 
-> ℹ️ **Configuration déployée : Single instance** (1 EC2, sans ALB ni ASG propre à Beanstalk). L'instance est ensuite enregistrée dans le Target Group `ecommerce-tg-frontend` de l'ALB public partagé — comme l'Option A.
+> ℹ️ **Configuration déployée : Single instance** (1 EC2, sans ALB ni ASG propre à Beanstalk). L'instance est ensuite enregistrée dans le Target Group `ecommerce-tg-frontend` de l'ALB public partagé - comme l'Option A.
 
 **Composants :**
 - **Application** : conteneur logique regroupant les versions et environnements
@@ -481,7 +481,7 @@ Health check : `GET /` (le frontend NGINX répond 200 sur `/`).
 | Scaling | Selon les pods pending (équivalent Karpenter intégré) |
 | Subnets | Privés uniquement |
 
-**Pourquoi EKS Auto Mode :** AWS provisionne et dimensionne automatiquement les nœuds selon la charge des pods — pas de Node Group à gérer, pas de Cluster Autoscaler à installer, patching OS automatique. Idéal pour un portfolio : on se concentre sur les workloads, pas sur la gestion des nœuds.
+**Pourquoi EKS Auto Mode :** AWS provisionne et dimensionne automatiquement les nœuds selon la charge des pods - pas de Node Group à gérer, pas de Cluster Autoscaler à installer, patching OS automatique. Idéal pour un portfolio : on se concentre sur les workloads, pas sur la gestion des nœuds.
 
 ### Amazon VPC CNI
 
@@ -675,7 +675,7 @@ MySQL 8.0 est compatible avec MariaDB 10.11 déployée localement. Votre schéma
 **Caractéristiques RDS MySQL (vérifiées sur AWS) :**
 - **Compatibilité :** drivers `mysql2` et schéma SQL inchangés
 - **Version :** MySQL 8.4.8
-- **Single-AZ :** instance unique en `eu-west-1b` (pas de Multi-AZ — choix Free Tier/portfolio). En production, activer Multi-AZ pour le failover automatique.
+- **Single-AZ :** instance unique en `eu-west-1b` (pas de Multi-AZ - choix Free Tier/portfolio). En production, activer Multi-AZ pour le failover automatique.
 - **Chiffrement :** AES-256 au repos et SSL en transit
 - **Backups automatiques :** 1 jour de rétention (configurable jusqu'à 35)
 - **Instance class :** `db.t4g.micro` (ARM Graviton, Free Tier eligible)
@@ -796,7 +796,7 @@ ECR (Elastic Container Registry) héberge les images Docker dans AWS. Les images
 | ecommerce/review-service | ghcr.io/yaraportfolio/review-service | latest | EKS (GHCR public, pas ECR) |
 | ecommerce/frontend | build local | latest | Option B (Beanstalk) + Option C (ECS) |
 
-> ℹ️ **Option A (EC2)** ne nécessite pas d'image ECR — le build React est fait directement sur la VM via `npm run build`.  
+> ℹ️ **Option A (EC2)** ne nécessite pas d'image ECR - le build React est fait directement sur la VM via `npm run build`.  
 > Les microservices restent sur **GHCR** (public, GitHub-natif) et ne sont pas migrés vers ECR.
 
 ### Politique de lifecycle
@@ -830,7 +830,7 @@ Deux secrets sont stockés dans Secrets Manager :
 ```
 
 Les secrets sont consommés de deux façons selon la couche :
-- **EKS / Kubernetes :** injectés au déploiement Helm (`--set database.password` / `--set jwt.secret`) en tant que `Secret` Kubernetes dans le namespace `ecommerce`, consommés par les pods via variables d'environnement. *(Une intégration optionnelle via le Secrets Store CSI Driver + IRSA est possible — voir `ecommerce-eks-secrets-role`.)*
+- **EKS / Kubernetes :** injectés au déploiement Helm (`--set database.password` / `--set jwt.secret`) en tant que `Secret` Kubernetes dans le namespace `ecommerce`, consommés par les pods via variables d'environnement. *(Une intégration optionnelle via le Secrets Store CSI Driver + IRSA est possible - voir `ecommerce-eks-secrets-role`.)*
 - **EC2 / Beanstalk / ECS :** valeurs passées via le script User Data (EC2), les variables d'environnement Beanstalk, ou la Task Definition ECS
 
 ### Rôles IAM (réels sur AWS)
@@ -849,7 +849,7 @@ Les secrets sont consommés de deux façons selon la couche :
 
 ### Principe du moindre privilège
 
-Chaque rôle n'a que les permissions strictement nécessaires. Les nœuds EKS n'accèdent pas à RDS directement — la connexion DB se fait via les variables d'environnement injectées dans les pods. Les pods accèdent à Secrets Manager uniquement via IRSA (`ecommerce-eks-secrets-role`), sans credentials AWS stockés.
+Chaque rôle n'a que les permissions strictement nécessaires. Les nœuds EKS n'accèdent pas à RDS directement - la connexion DB se fait via les variables d'environnement injectées dans les pods. Les pods accèdent à Secrets Manager uniquement via IRSA (`ecommerce-eks-secrets-role`), sans credentials AWS stockés.
 
 ---
 
@@ -1058,7 +1058,7 @@ Estimation pour un usage modéré en `eu-west-1`, hors Free Tier.
 ### Optimisations pour réduire les coûts (portfolio)
 
 - **Éteindre EC2/Beanstalk/ECS** hors démos (`aws ec2 stop-instances`)
-- **Scale EKS à 0** (`kubectl scale deployment --all --replicas=0`) — Auto Mode retire les nœuds
+- **Scale EKS à 0** (`kubectl scale deployment --all --replicas=0`) - Auto Mode retire les nœuds
 - **Stopper RDS** quand inutilisé (`aws rds stop-db-instance`)
 - **EC2 frontend en Free Tier** : t3.micro gratuit la 1ère année
 - Incompressibles en continu : EKS control plane (~$73) + ALB (~$16) + NAT (~$33) ≈ **$120/mois**

@@ -616,7 +616,7 @@ EKS crée et gère le control plane Kubernetes. EKS Auto Mode gère les worker n
 - ✅ Metrics Server (requis pour HPA/autoscaling)
 - ✅ **AWS Secrets and Configuration Provider** (requis pour AWS Secrets Manager)
 
-> ⚠️ **Ne pas cocher "Amazon EBS CSI Driver"** — incompatible avec EKS Auto Mode (Create failed).
+> ⚠️ **Ne pas cocher "Amazon EBS CSI Driver"** - incompatible avec EKS Auto Mode (Create failed).
 
 > ℹ️ **AWS Load Balancer Controller** n'est PAS dans cette liste. Il sera installé séparément via Helm à l'étape 7.5.
 
@@ -669,7 +669,7 @@ kubectl get nodes
 
 > ℹ️ **IRSA (IAM Roles for Service Accounts)** permet aux pods Kubernetes d'assumer des rôles IAM AWS sans stocker de credentials. L'OIDC Provider est la clé de confiance entre EKS et IAM.
 
-**Étape 1 — Récupérer l'URL OIDC du cluster :**
+**Étape 1 - Récupérer l'URL OIDC du cluster :**
 
 EKS → `ecommerce-cluster` → onglet **Overview** → copier la valeur **OpenID Connect provider URL**
 
@@ -677,7 +677,7 @@ EKS → `ecommerce-cluster` → onglet **Overview** → copier la valeur **OpenI
 https://oidc.eks.eu-west-1.amazonaws.com/id/XXXXXXXXXXXX
 ```
 
-**Étape 2 — Créer le provider dans IAM :**
+**Étape 2 - Créer le provider dans IAM :**
 
 1. **IAM** → **Identity providers** → **Add provider**
 2. **Provider type :** `OpenID Connect`
@@ -716,7 +716,7 @@ Le **AWS Load Balancer Controller** crée automatiquement un ALB (Application Lo
 8. **Role name :** `AWSLoadBalancerControllerRole`
 9. Cliquer **Create role**
 
-**Étape critique — Restreindre le trust policy au bon ServiceAccount :**
+**Étape critique - Restreindre le trust policy au bon ServiceAccount :**
 
 IAM → Roles → `AWSLoadBalancerControllerRole` → onglet **Trust relationships** → **Edit trust policy**
 
@@ -867,7 +867,7 @@ helm install ecommerce-microservices . \
   --set jwt.secret="VOTRE_JWT_SECRET"
 ```
 
-> ℹ️ Les images GHCR sont **publiques** — aucun secret de registry requis.
+> ℹ️ Les images GHCR sont **publiques** - aucun secret de registry requis.
 
 #### Vérifier le déploiement
 
@@ -883,7 +883,7 @@ kubectl get ingress -n ecommerce
 #   (le préfixe "internal-" confirme que l'ALB est privé ✅)
 ```
 
-> ℹ️ **L'ALB EKS est interne (privé)** — il n'est accessible que depuis l'intérieur du VPC. Il est inaccessible depuis internet, ce qui est le comportement attendu. Les microservices sont joints uniquement par le frontend (EC2/Beanstalk/ECS) via cet ALB interne.
+> ℹ️ **L'ALB EKS est interne (privé)** - il n'est accessible que depuis l'intérieur du VPC. Il est inaccessible depuis internet, ce qui est le comportement attendu. Les microservices sont joints uniquement par le frontend (EC2/Beanstalk/ECS) via cet ALB interne.
 
 > Pour tester depuis votre machine : utiliser un pod de debug dans le cluster.
 
@@ -905,7 +905,7 @@ kubectl run -it --rm debug --image=curlimages/curl --restart=Never -n ecommerce 
 - EC2 → **Load Balancers** → `ecommerce-alb` → statut **Active** → Scheme : **internal** ✅
 - EKS → `ecommerce-cluster` → **Resources** → **Pods** → Namespace `ecommerce` → 4 pods Running
 
-**Noter l'URL de l'ALB interne** — elle sera utilisée dans la config NGINX du frontend (sections 8, 9, 10) :
+**Noter l'URL de l'ALB interne** - elle sera utilisée dans la config NGINX du frontend (sections 8, 9, 10) :
 ```
 internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com
 ```
@@ -916,14 +916,14 @@ internal-ecommerce-alb-xxxx.eu-west-1.elb.amazonaws.com
 
 L'ALB est le point d'entrée unique pour le trafic internet. Il distribue vers les instances frontend. **Il doit être créé avant les options frontend (9/10/11) car elles s'y attachent.**
 
-> 📸 _Capture : liste des Target Groups — `ecommerce-tg-frontend` (Instance) + `ecs-gateway-tg` (IP) sur l'ALB public, et les 4 TG microservices (type IP, port nominal `1`) sur l'ALB interne EKS_
+> 📸 _Capture : liste des Target Groups - `ecommerce-tg-frontend` (Instance) + `ecs-gateway-tg` (IP) sur l'ALB public, et les 4 TG microservices (type IP, port nominal `1`) sur l'ALB interne EKS_
 ![Target Groups](../img/alb-targets.png)
 
 ### 8.1 Créer le Target Group
 
 **Navigation :** EC2 → **Target Groups** (menu de gauche, section Load Balancing) → **Create target group**
 
-Ce Target Group reçoit les instances **EC2 (Option A)** et **Beanstalk (Option B)** — toutes deux en type `Instances`.
+Ce Target Group reçoit les instances **EC2 (Option A)** et **Beanstalk (Option B)** - toutes deux en type `Instances`.
 
 > ℹ️ **ECS Fargate (Option C)** n'utilise PAS ce TG : Express Mode crée automatiquement son propre Target Group en type **IP**. On l'ajoutera au même ALB en section 11.
 
@@ -1117,7 +1117,7 @@ systemctl start nginx
 
 > ⚠️ Remplacer `internal-ecommerce-alb-xxxx` par l'URL réelle récupérée à l'étape 7.8.
 
-Cliquer **Launch instance** — attendre ~4-5 minutes le temps du build.
+Cliquer **Launch instance** - attendre ~4-5 minutes le temps du build.
 
 ---
 
@@ -1174,7 +1174,7 @@ Beanstalk gère tout automatiquement : EC2, ALB, autoscaling. Idéal pour compre
 
 ---
 
-### 10.0 Prérequis — Builder et pousser l'image frontend vers ECR
+### 10.0 Prérequis - Builder et pousser l'image frontend vers ECR
 
 > ℹ️ Contrairement à l'Option A (build direct sur EC2), Beanstalk utilise une **image Docker** hébergée sur ECR. Cette étape est obligatoire avant de créer l'environnement Beanstalk.
 
@@ -1258,7 +1258,7 @@ Créer ce fichier sur votre machine et l'uploader :
 
 **Step 2 - Configure service access :**
 
-Deux rôles IAM sont nécessaires ici — créez-les si ils n'existent pas encore :
+Deux rôles IAM sont nécessaires ici - créez-les si ils n'existent pas encore :
 
 **Service role** (rôle assumé par Beanstalk pour gérer l'infrastructure) :
 - Cliquer **Create role** → **AWS service** → **Elastic Beanstalk** → **Elastic Beanstalk - Environment** → **Next**
@@ -1284,7 +1284,7 @@ Deux rôles IAM sont nécessaires ici — créez-les si ils n'existent pas encor
 | Database | ❌ Désactivé (on utilise RDS existant) |
 | Tags | Optionnel |
 
-> ℹ️ Le Security Group **n'est pas sur cette page** — il est dans le **Step 4**.
+> ℹ️ Le Security Group **n'est pas sur cette page** - il est dans le **Step 4**.
 
 **Step 4 - Configure instance traffic and scaling :**
 
@@ -1328,7 +1328,7 @@ Cliquer **Next** → **Submit** → Attendre ~5 minutes
 
 ### 10.2 Attacher l'instance Beanstalk au Target Group
 
-> ℹ️ Beanstalk (Single instance) crée une EC2. On l'attache à `ecommerce-tg-frontend` pour qu'elle soit accessible via l'ALB public — exactement comme l'Option A.
+> ℹ️ Beanstalk (Single instance) crée une EC2. On l'attache à `ecommerce-tg-frontend` pour qu'elle soit accessible via l'ALB public - exactement comme l'Option A.
 
 Une fois l'environnement **Health : Ok** :
 
@@ -1340,7 +1340,7 @@ Attendre statut **healthy**.
 
 **URL de l'environnement Beanstalk :** visible dans Elastic Beanstalk → `ecommerce-frontend-prod` → sous la forme `ecommerce-frontend-prod.eba-xxx.eu-west-1.elasticbeanstalk.com` (accès direct, sans passer par l'ALB public)
 
-**URL via ALB public :** `https://ecommerce.mondomaine.app` — une fois l'instance registered et healthy dans `ecommerce-tg-frontend`.
+**URL via ALB public :** `https://ecommerce.mondomaine.app` - une fois l'instance registered et healthy dans `ecommerce-tg-frontend`.
 
 ---
 
@@ -1355,7 +1355,7 @@ ECS Fargate exécute vos conteneurs sans gérer de serveurs. AWS provisionne les
 
 ---
 
-### 11.0 Prérequis — Builder une image taguée `ecs`
+### 11.0 Prérequis - Builder une image taguée `ecs`
 
 > ⚠️ **Important :** `VITE_DEPLOY_PLATFORM` est une variable **build-time** (intégrée au build React, pas au runtime). La définir en variable d'environnement ECS ne change PAS le badge. Il faut une image dédiée buildée avec le bon `--build-arg`.
 
@@ -1441,23 +1441,23 @@ Express Mode crée **automatiquement** sa propre infrastructure :
 
 Pour servir les 3 options derrière le **même** ALB public (`ecommerce-alb-pub`), on récupère le TG auto-créé et on supprime l'ALB en doublon.
 
-**Étape 1 — Supprimer l'ALB public créé par ECS Express :**
+**Étape 1 - Supprimer l'ALB public créé par ECS Express :**
 
 EC2 → **Load Balancers** → `ecs-express-gateway-alb-xxxx` → **Actions → Delete**
 
-> ℹ️ Ne PAS supprimer le Target Group `ecs-gateway-tg-xxxx` — on le réutilise. Il reste valide même sans son ALB.
+> ℹ️ Ne PAS supprimer le Target Group `ecs-gateway-tg-xxxx` - on le réutilise. Il reste valide même sans son ALB.
 
-**Étape 2 — Ajouter le TG ECS au listener de `ecommerce-alb-pub` :**
+**Étape 2 - Ajouter le TG ECS au listener de `ecommerce-alb-pub` :**
 
 EC2 → **Load Balancers** → `ecommerce-alb-pub` → **Listeners** → HTTPS:443 → **Edit** :
 - Routing action : **Forward to target groups**
 - Garder `ecommerce-tg-frontend` (poids `2`)
 - **Add target group** → `ecs-gateway-tg-xxxx` (poids `1`)
-- ✅ **Turn on target group stickiness** (voir section 8.3 — obligatoire)
+- ✅ **Turn on target group stickiness** (voir section 8.3 - obligatoire)
 
 Cliquer **Save changes**.
 
-**Étape 3 — Vérifier :**
+**Étape 3 - Vérifier :**
 
 EC2 → **Target Groups** → `ecs-gateway-tg-xxxx` → **Targets** → la task Fargate doit être **healthy** (port réel de la task, type IP).
 
@@ -1469,13 +1469,13 @@ EC2 → **Target Groups** → `ecs-gateway-tg-xxxx` → **Targets** → la task 
 
 ## 12. CloudFront (optionnel)
 
-> ℹ️ **Étape optionnelle — non déployée dans ce portfolio.** CloudFront ajoute un CDN mondial + WAF devant l'ALB public. Documenté ici pour référence d'architecture.
+> ℹ️ **Étape optionnelle - non déployée dans ce portfolio.** CloudFront ajoute un CDN mondial + WAF devant l'ALB public. Documenté ici pour référence d'architecture.
 
 CloudFront met en cache le frontend globalement (CDN mondial) et ajoute une couche de sécurité WAF.
 
 **Navigation :** Barre de recherche → `CloudFront` → **Create distribution**
 
-> ⚠️ CloudFront est un service **global** — la console affiche toujours "Global" dans le sélecteur de région. C'est normal.
+> ⚠️ CloudFront est un service **global** - la console affiche toujours "Global" dans le sélecteur de région. C'est normal.
 
 ### Step 1 - Get started
 
@@ -1510,7 +1510,7 @@ Vérifier → **Create distribution** → Attendre **~10 minutes** (déploiement
 
 ### 12.1 Connecter le domaine custom (`ecommerce.mondomaine.app`)
 
-> ⚠️ **CloudFront exige un certificat ACM dans la région `us-east-1` (N. Virginia)** — différent du certificat ALB (eu-west-1). Il faut en créer un nouveau.
+> ⚠️ **CloudFront exige un certificat ACM dans la région `us-east-1` (N. Virginia)** - différent du certificat ALB (eu-west-1). Il faut en créer un nouveau.
 
 1. **ACM (us-east-1)** → Request certificate → `ecommerce.mondomaine.app` → validation DNS (Cloudflare)
 2. **CloudFront** → distribution → **Settings → Edit** → Alternate domain names → ajouter `ecommerce.mondomaine.app` + sélectionner le cert us-east-1

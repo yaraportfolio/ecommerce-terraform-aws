@@ -1073,7 +1073,7 @@ echo "✅ ALB configuré : https://$ALB_DNS"
 
 ## 12. CloudFront + DNS (optionnel)
 
-> ℹ️ **Étape optionnelle — non déployée dans ce portfolio.** Le DNS est géré par Cloudflare (CNAME → ALB public). CloudFront ajouterait un CDN + WAF devant l'ALB. Documenté ici pour référence.
+> ℹ️ **Étape optionnelle - non déployée dans ce portfolio.** Le DNS est géré par Cloudflare (CNAME → ALB public). CloudFront ajouterait un CDN + WAF devant l'ALB. Documenté ici pour référence.
 
 CloudFront met le frontend en cache globalement. Le DNS pointe votre domaine vers CloudFront (ou directement vers l'ALB public sans CloudFront).
 
