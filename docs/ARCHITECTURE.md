@@ -136,7 +136,7 @@ auth:3001  product:3002  order:3003  review:3004
 │  │    ┌────────────────────────────────────────┐                         │   │
 │  │    │  RDS MySQL 8.0 - ecommerce-mysql       │                         │   │
 │  │    │  Endpoint : ecommerce-mysql.xxx.rds    │                         │   │
-│  │    │  db.t4g.micro · chiffré (AES-256)       │                         │   │
+│  │    │  db.t4g.micro · chiffré (AES-256)      │                         │   │
 │  │    │  ecommerce_db · backups automatiques   │                         │   │
 │  │    └────────────────────────────────────────┘                         │   │
 │  │                SG-RDS : :3306 ← SG-EKS uniquement                     │   │
