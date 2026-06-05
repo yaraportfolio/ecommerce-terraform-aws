@@ -1,0 +1,30 @@
+# ===== Terraform =====
+# State local (contient des secrets en clair : db_password, jwt_secret) - NE JAMAIS committer
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+
+# Répertoires de travail / providers téléchargés
+**/.terraform/*
+.terraform.lock.hcl
+
+# Fichiers de variables potentiellement sensibles
+# (le terraform.tfvars de ce repo ne contient PAS de secrets - secrets via TF_VAR_ - il reste versionné)
+*.auto.tfvars
+*.auto.tfvars.json
+secrets.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Plans binaires (peuvent contenir des valeurs sensibles)
+*.tfplan
+*.plan
+
+# ===== Divers =====
+.DS_Store
+*.log

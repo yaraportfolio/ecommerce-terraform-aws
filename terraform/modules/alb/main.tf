@@ -14,6 +14,11 @@ resource "aws_lb_target_group" "frontend" {
   vpc_id      = var.vpc_id
   target_type = "instance"
   health_check { path = "/"; interval = 30; healthy_threshold = 2; unhealthy_threshold = 3 }
+
+  # Chaque plateforme sert un build React au hash différent : sans stickiness, un
+  # visiteur basculerait d'un build à l'autre → page blanche (cf. GUIDE-CONSOLE-AWS $8.3).
+  stickiness { type = "lb_cookie"; cookie_duration = 86400; enabled = true }
+
   tags = { Name = "${var.project}-tg-frontend" }
 }
 

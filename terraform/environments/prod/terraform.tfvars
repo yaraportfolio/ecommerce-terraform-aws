@@ -4,13 +4,10 @@ environment             = "prod"
 vpc_cidr                = "10.0.0.0/16"
 db_name                 = "ecommerce_db"
 db_username             = "devops_user"
-rds_instance_class      = "db.t3.medium"
-eks_node_instance_type  = "t3.medium"
-eks_node_min            = 2
-eks_node_max            = 6
-eks_node_desired        = 3
+rds_instance_class      = "db.t4g.micro"
+eks_cluster_version     = "1.31"
 frontend_mode           = "ec2"
-microservices_image_tag = "v3.3"
+microservices_image_tag = "latest"
 
 # ⚠️ Ne pas committer ces valeurs - utiliser TF_VAR_db_password et TF_VAR_jwt_secret
 # db_password    = ""

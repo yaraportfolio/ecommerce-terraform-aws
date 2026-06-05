@@ -846,28 +846,42 @@ git clone https://github.com/yaraportfolio/ecommerce-k8s-helm.git
 cd ecommerce-k8s-helm
 ```
 
+#### Créer le rôle IRSA des secrets (`ecommerce-eks-secrets-role`)
+
+Le chart consomme les secrets via le **Secrets Store CSI Driver** (add-on ASCP coché en $7.1). Créez un rôle IRSA - même procédure que le rôle LBC ($7.5.B), via **IAM → Roles → Create role → Web identity** :
+
+- **Identity provider** : `oidc.eks.eu-west-1.amazonaws.com/id/XXXX`
+- **Audience** : `sts.amazonaws.com`
+- **Permissions** : policy inline `secretsmanager:GetSecretValue` + `secretsmanager:DescribeSecret` sur les ARN de `ecommerce/db/credentials` et `ecommerce/jwt/secret`
+- **Role name** : `ecommerce-eks-secrets-role`
+- **Trust policy** - restreindre au ServiceAccount `ecommerce/ecommerce-sa` :
+  ```
+  "oidc.eks.eu-west-1.amazonaws.com/id/OIDC_ID:sub": "system:serviceaccount:ecommerce:ecommerce-sa"
+  ```
+
 #### Déployer
 
 ```bash
-# Récupérer l'endpoint RDS
+# Récupérer l'endpoint RDS + l'ARN du rôle secrets
 RDS_HOST=$(aws rds describe-db-instances \
   --db-instance-identifier ecommerce-mysql \
   --region eu-west-1 \
-  --query "DBInstances[0].Endpoint.Address" \
-  --output text)
+  --query "DBInstances[0].Endpoint.Address" --output text)
+SECRETS_ROLE_ARN=$(aws iam get-role --role-name ecommerce-eks-secrets-role \
+  --query 'Role.Arn' --output text)
 
-# Créer le namespace
 kubectl create namespace ecommerce
 
-# Déployer via Helm
+# Déployer via Helm - secrets fournis par AWS Secrets Manager (CSI Driver)
 helm install ecommerce-microservices . \
   --namespace ecommerce \
   --set database.host=$RDS_HOST \
-  --set database.password="VOTRE_MOT_DE_PASSE" \
-  --set jwt.secret="VOTRE_JWT_SECRET"
+  --set awsSecretsManager.enabled=true \
+  --set awsSecretsManager.region=eu-west-1 \
+  --set awsSecretsManager.iamRoleArn=$SECRETS_ROLE_ARN
 ```
 
-> ℹ️ Les images GHCR sont **publiques** - aucun secret de registry requis.
+> ℹ️ Les images GHCR sont **publiques** - aucun secret de registry requis. Les credentials DB/JWT viennent d'**AWS Secrets Manager** ($7.7) via le CSI Driver - rien en clair dans la ligne de commande.
 
 #### Vérifier le déploiement
 

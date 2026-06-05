@@ -4,6 +4,3 @@ output "rds_endpoint"        { value = module.rds.endpoint }
 output "eks_cluster_name"    { value = module.eks.cluster_name }
 output "ecr_urls"            { value = module.ecr.repository_urls }
 output "frontend_mode"       { value = var.frontend_mode }
-output "cloudfront_domain"  { value = module.cloudfront.cloudfront_domain }
-output "dashboard_url"      { value = module.observability.dashboard_url }
-output "cloudtrail_bucket"  { value = module.observability.cloudtrail_s3 }

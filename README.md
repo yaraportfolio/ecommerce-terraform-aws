@@ -7,7 +7,7 @@
 ![Docker](https://img.shields.io/badge/Docker-ECR-2496ED?logo=docker&logoColor=white)
 
 > **Auteur :** Yara Mahi Mohamed - Portfolio DevOps & SRE
-> **Stack :** React 18 + NGINX · Node.js 20 (4 microservices) · RDS MySQL 8.0 · EKS Auto Mode + Helm
+> **Stack :** React 18 + NGINX · Node.js 20 (4 microservices) · RDS MySQL 8.4 · EKS Auto Mode + Helm
 > **Région :** `eu-west-1` (Irlande) · **Domaine :** [ecommerce.mondomaine.app](https://ecommerce.mondomaine.app)
 
 Déploiement d'une plateforme e-commerce microservices sur AWS, avec le **frontend déployé de 3 façons différentes** (EC2, Elastic Beanstalk, ECS Fargate) pour illustrer la progression IaaS → PaaS → Serverless. Un badge dynamique dans la navbar indique en temps réel sur quelle plateforme tourne l'instance servie.
@@ -40,7 +40,7 @@ Internet → Cloudflare DNS (ecommerce.mondomaine.app)
    └──────┴───────┼────────┴─────────┘
                   │ MySQL :3306
         ┌─────────▼──────────┐
-        │  RDS MySQL 8.0     │  ecommerce-mysql
+        │  RDS MySQL 8.4     │  ecommerce-mysql
         └────────────────────┘
 ```
 
@@ -112,25 +112,56 @@ Ordre : VPC → Security Groups → RDS → Secrets Manager → ECR → EKS → 
 
 ### Option 2 - Terraform (Phase 2)
 
+State **local** (portfolio) - aucun backend S3/DynamoDB à provisionner.
+
 ```bash
+# Se placer dans l'environnement de prod
 cd terraform/environments/prod
+
+# Télécharger les providers (AWS, Kubernetes, Helm, TLS) — une seule fois
 terraform init
 
-export TF_VAR_db_password="••••••"
-export TF_VAR_jwt_secret="••••••••••••••••••••••••••••••••"
-export TF_VAR_certificate_arn="arn:aws:acm:eu-west-1:ACCOUNT:certificate/XXXX"
-export TF_VAR_frontend_mode="ec2"   # ec2 | beanstalk | ecs
+# --- Valeurs propres à ton compte (jamais en clair dans un fichier versionné) ---
+export TF_VAR_db_password="••••••"                                             # mot de passe RDS
+export TF_VAR_jwt_secret="••••••••••••••••••••••••••••••••"                    # secret JWT partagé
+export TF_VAR_certificate_arn="arn:aws:acm:eu-west-1:ACCOUNT:certificate/XXXX" # TON certificat ACM (eu-west-1)
+export TF_VAR_frontend_mode="ec2"                                             # ec2 | beanstalk | ecs
 
-terraform plan -out=tfplan
-terraform apply tfplan
+# (Optionnel) Prévisualiser ce qui sera créé/modifié, sans rien appliquer
+terraform plan
+
+# 1er apply : monte toute l'infra (VPC, EKS, RDS, ALB, frontend…)
+# → tape "yes" pour confirmer
+terraform apply
+
+# 2e apply : propage le DNS de l'ALB interne (créé en asynchrone par le LBC)
+# vers le frontend. C'est son seul effet (voir la note ⚠️ ci-dessous).
+terraform apply
 ```
 
-Switcher de plateforme frontend sans tout recréer :
+> ⚠️ **Deux `apply` sont nécessaires.** L'ALB **interne** EKS est créé de façon asynchrone par l'AWS Load Balancer Controller après le déploiement Helm. Le 1er `apply` monte toute l'infra ; le 2e propage automatiquement le **DNS de l'ALB interne** (lu depuis l'Ingress) vers le frontend (`backend_url`). C'est le seul effet du second passage.
+
+Switcher de plateforme frontend sans tout recréer (un seul mode actif à la fois) :
 
 ```bash
 terraform apply -var="frontend_mode=beanstalk"
 terraform apply -var="frontend_mode=ecs"
 ```
+
+#### ✅ Ce que Terraform fait automatiquement
+VPC / subnets / NAT / routes · Security Groups (+ règle RDS←EKS) · RDS MySQL + secrets · EKS Auto Mode + add-ons + LB Controller · microservices (Helm, secrets via CSI/IRSA) · ALB public + listeners + stickiness · les **3 frontends** (EC2 natif, Beanstalk avec image ECR, ECS Fargate **TG IP**) **enregistrés tout seuls** dans l'ALB · ECR · DNS de l'ALB interne propagé au frontend.
+
+#### 🖐️ Actions manuelles restantes (non automatisables proprement)
+
+| Action | Quand | Pourquoi pas dans Terraform |
+|--------|-------|------------------------------|
+| **Certificat ACM** + validation DNS | avant `apply` | Demander le cert ACM et le valider via un enregistrement DNS **Cloudflare** (compte externe). Passer l'ARN dans `TF_VAR_certificate_arn`. |
+| **DNS Cloudflare** : CNAME `domaine → ALB public` | après `apply` | Cloudflare est **externe** au Terraform (nécessiterait un token API). |
+| **Build + push de l'image `ecommerce/frontend` sur ECR** | avant les modes `beanstalk`/`ecs` | Artefact applicatif (`docker build && push`) - relève du CI/CD, pas de l'infra. *(Le mode `ec2` n'en a pas besoin : build natif sur la VM.)* |
+| **Import du schéma `ecommerce_db.sql`** | après `apply` | RDS est privé (pas d'accès depuis votre poste) → via un bastion ou SSM, une seule fois. Ce sont des **données**, pas de l'infra. |
+| **Sauvegarde de `terraform.tfstate`** | après chaque `apply` | Inhérent au state local : un simple `cp` ailleurs (le fichier contient les secrets, ne pas le committer). |
+
+> ℹ️ Tout le reste (IAM, Security Groups, IP publiques, réseau, enregistrement dans les Target Groups) est **entièrement géré par Terraform**.
 
 ---
 
@@ -168,7 +199,7 @@ Le badge est piloté par la variable **build-time** `VITE_DEPLOY_PLATFORM` (int�
 | Compartment | Account / Tags | Isolation logique |
 | OCR | ECR | Registry Docker |
 | OKE | EKS (Auto Mode) | Kubernetes managé |
-| Autonomous DB / DBCS | RDS MySQL 8.0 | Compatible MariaDB 10.11 |
+| Autonomous DB / DBCS | RDS MySQL 8.4 | Compatible MariaDB 10.11 |
 | Load Balancer | ALB | Application Load Balancer (L7) |
 | Security List / NSG | Security Group | AWS SG stateful |
 
